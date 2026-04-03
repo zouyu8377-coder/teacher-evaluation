@@ -17,9 +17,9 @@
       </el-form>
       <div class="tips">
         <p>测试账号：</p>
-        <p>管理员: admin / demo123</p>
-        <p>考核员: evaluator1 / demo123</p>
-        <p>教师: teacher1 / demo123</p>
+        <p>管理员: admin / admin123</p>
+        <p>考核员: evaluator1 / eval123</p>
+        <p>教师: teacher1 / teacher123</p>
       </div>
     </el-card>
   </div>
