@@ -30,3 +30,27 @@ export const updatePeriod = (id: number, data: {
 export const deletePeriod = (id: number) => {
   return api.delete(`/periods/${id}`)
 }
+
+export const enrollPeriod = (id: number) => {
+  return api.post(`/periods/${id}/enroll`)
+}
+
+export const getAvailablePeriods = () => {
+  return api.get('/periods/available')
+}
+
+export const getMyEnrollments = () => {
+  return api.get('/periods/my-enrollments')
+}
+
+export const getPeriodEnrollments = (id: number) => {
+  return api.get(`/periods/${id}/enrollments`)
+}
+
+export const removeEnrollment = (periodId: number, teacherId: number) => {
+  return api.delete(`/periods/${periodId}/enrollments/${teacherId}`)
+}
+
+export const getEnrolledTeachers = () => {
+  return api.get('/periods/enrolled-teachers')
+}

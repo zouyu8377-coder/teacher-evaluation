@@ -65,7 +65,8 @@ const loading = ref(false)
 const form = reactive({
   periodId: null as number | null,
   title: '',
-  description: ''
+  description: '',
+  file: null as File | null
 })
 
 const rules = {
@@ -76,7 +77,6 @@ const rules = {
 
 const periods = ref<any[]>([])
 const fileList = ref<any[]>([])
-const file = ref<File | null>(null)
 
 const loadPeriods = async () => {
   const res = await getPeriodList()
@@ -85,13 +85,18 @@ const loadPeriods = async () => {
   }
 }
 
-const handleFileChange = (uploadFile: any) => {
-  file.value = uploadFile.raw
-  fileList.value = [uploadFile]
+const handleFileChange = (uploadFile: any, uploadFiles: any[]) => {
+  if (uploadFile && uploadFile.raw) {
+    form.file = uploadFile.raw
+    fileList.value = [uploadFile]
+  } else if (uploadFiles && uploadFiles.length > 0 && uploadFiles[0].raw) {
+    form.file = uploadFiles[0].raw
+    fileList.value = uploadFiles
+  }
 }
 
 const handleFileRemove = () => {
-  file.value = null
+  form.file = null
   fileList.value = []
 }
 
@@ -99,7 +104,7 @@ const handleSubmit = async () => {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
-  if (!file.value) {
+  if (!form.file) {
     ElMessage.warning('请选择文件')
     return
   }
@@ -107,7 +112,7 @@ const handleSubmit = async () => {
   loading.value = true
   try {
     const formData = new FormData()
-    formData.append('file', file.value)
+    formData.append('file', form.file)
     formData.append('periodId', String(form.periodId))
     formData.append('title', form.title)
     formData.append('description', form.description)

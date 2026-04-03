@@ -702,4 +702,371 @@ curl -X POST http://localhost:8083/api/auth/login \
 
 **最后更新**：2026年4月3日 14:50
 
-**文档版本**：1.3
+---
+
+## 实施进展记录 (2026年4月3日 - Docker环境搭建)
+
+### Docker测试环境搭建完成
+
+#### 1. Docker镜像加速配置
+
+**问题**：无法从Docker Hub拉取镜像（网络不通）
+
+**解决方案**：配置国内镜像源
+
+1. 打开Docker Desktop → Settings → Docker Engine
+2. 添加镜像源配置：
+```json
+{
+  "registry-mirrors": [
+    "https://docker.mirrors.ustc.edu.cn",
+    "https://hub-mirror.c.163.com",
+    "https://mirror.baidubce.com",
+    "https://docker.1ms.run"
+  ]
+}
+```
+3. Apply & Restart
+
+#### 2. 拉取基础镜像
+
+成功拉取以下镜像：
+- mysql:8.0 ✅
+- redis:7-alpine ✅
+- minio/minio ✅
+- eclipse-temurin:17-jre-alpine ✅
+
+#### 3. Docker Compose启动
+
+**修改内容**：
+- 优化Dockerfile（直接使用本地jar，避免重复编译超时）
+- 添加MySQL连接参数 `allowPublicKeyRetrieval=true`
+
+**启动结果**：
+| 服务 | 状态 | 端口 |
+|------|------|------|
+| MySQL | ✅ 运行中 | 3306 |
+| Redis | ✅ 运行中 | 6379 |
+| MinIO | ✅ 运行中 | 9000/9001 |
+| Backend | ✅ 运行中 | 8080 |
+
+#### 4. 服务访问地址
+
+| 服务 | 地址 |
+|------|------|
+| 后端API | http://localhost:8080 |
+| Swagger文档 | http://localhost:8080/swagger-ui/index.html |
+| MinIO控制台 | http://localhost:9001 (minioadmin/minioadmin) |
+| 前端（手动） | http://localhost:5174 |
+
+#### 5. 测试账号
+
+| 角色 | 用户名 | 密码 |
+|------|--------|------|
+| 管理员 | admin | admin123 |
+| 考核员 | evaluator1 | eval123 |
+| 教师 | teacher1 | teacher123 |
+| 教师 | teacher2 | teacher123 |
+
+#### 6. 启动命令
+
+```powershell
+# Docker环境一键启动
+cd C:\TeacherEvaluation
+docker-compose up -d
+
+# 前端手动启动
+cd C:\TeacherEvaluation\frontend
+npm run dev
+```
+
+---
+
+**当前执行人**：OpenCode AI助手
+
+**最后更新**：2026年4月3日 17:00
+
+**文档版本**：1.4
+
+---
+
+## 实施进展记录 (2026年4月3日 - 前端登录问题修复)
+
+### 问题描述
+
+前端无法登录，提示"无权限访问"或连接错误。
+
+### 问题分析
+
+1. **前端代理端口错误**：vite.config.ts中代理指向8083端口，但Docker后端运行在8080端口
+2. **前端未启动**：前端服务未运行
+
+### 解决方案
+
+1. 启动前端服务：
+```powershell
+cd C:\TeacherEvaluation\frontend
+npm run dev
+```
+
+2. 修改前端代理配置（vite.config.ts）：
+```typescript
+proxy: {
+  '/api': {
+    target: 'http://localhost:8080',  // 修改为8080
+    changeOrigin: true
+  }
+}
+```
+
+### 验证结果
+
+- 前端访问：http://localhost:5174 ✅
+- 后端API：http://localhost:8080 ✅
+- 登录功能：正常工作 ✅
+
+---
+
+**最后更新**：2026年4月3日 17:10
+
+**文档版本**：1.5
+
+---
+
+## 实施进展记录 (2026年4月3日 - 学习资料功能开发)
+
+### 功能开发完成
+
+#### 1. 文档上传问题修复 ✅
+
+**问题描述**: 教师上传文档页面，选中文件后点击提交仍提示需要选择文件
+
+**问题原因**: 
+- `DocumentUpload.vue` 中 `file` 是独立的 `ref<File | null>` 变量
+- 表单验证规则 `rules.file` 指向 `form.file`，但 `form` 对象中没有 `file` 属性
+- 导致验证无法正确触发
+
+**解决方案**: 将 `file` 放入 `form` 响应式对象中
+
+```typescript
+const form = reactive({
+  periodId: null as number | null,
+  title: '',
+  description: '',
+  file: null as File | null  // 添加到form对象中
+})
+```
+
+#### 2. 学习资料功能开发 ✅
+
+**功能需求**: 在每个考核周期内，管理员上传学习资料供教师下载学习
+
+**数据库设计**:
+
+```sql
+CREATE TABLE IF NOT EXISTS learning_materials (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    period_id BIGINT NOT NULL COMMENT '考核周期ID',
+    title VARCHAR(200) NOT NULL COMMENT '资料标题',
+    file_path VARCHAR(500) NOT NULL COMMENT 'MinIO存储路径',
+    file_name VARCHAR(200) NOT NULL COMMENT '原始文件名',
+    file_size BIGINT COMMENT '文件大小',
+    file_type VARCHAR(100) COMMENT 'MIME类型',
+    description VARCHAR(500) COMMENT '资料描述',
+    created_by BIGINT NOT NULL COMMENT '上传人ID',
+    is_deleted TINYINT DEFAULT 0 COMMENT '软删除: 0否 1是',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_period_id (period_id),
+    INDEX idx_created_by (created_by),
+    INDEX idx_is_deleted (is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学习资料表';
+```
+
+**后端实现**:
+
+| 文件 | 说明 |
+|------|------|
+| `entity/LearningMaterial.java` | 实体类 |
+| `repository/LearningMaterialRepository.java` | 数据访问层 |
+| `service/LearningMaterialService.java` | 业务逻辑层 |
+| `controller/LearningMaterialController.java` | API控制器 |
+
+**API接口设计**:
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | /api/learning-materials | all | 查询资料列表 |
+| GET | /api/learning-materials/{id} | all | 资料详情 |
+| POST | /api/learning-materials | admin | 上传资料 |
+| PUT | /api/learning-materials/{id} | admin | 修改资料 |
+| DELETE | /api/learning-materials/{id} | admin | 删除资料 |
+| GET | /api/learning-materials/{id}/download | all | 下载资料 |
+
+**前端实现**:
+
+| 文件 | 说明 |
+|------|------|
+| `api/learningMaterial.ts` | API请求封装 |
+| `views/admin/MaterialManage.vue` | 管理员页面（增删改查+下载） |
+| `views/evaluator/MaterialList.vue` | 考核员页面（查询+下载） |
+| `views/teacher/MaterialList.vue` | 教师页面（查询+下载） |
+
+**权限设计**:
+
+| 角色 | 上传 | 编辑 | 删除 | 下载 | 查询 |
+|------|------|------|------|------|------|
+| 管理员 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 考核员 | ❌ | ❌ | ❌ | ✅ | ✅ |
+| 教师 | ❌ | ❌ | ❌ | ✅ | ✅ |
+
+**路由配置**:
+
+```typescript
+// 管理员
+{ path: 'materials', name: 'AdminMaterials', component: () => import('@/views/admin/MaterialManage.vue') }
+// 考核员
+{ path: 'materials', name: 'EvaluatorMaterials', component: () => import('@/views/evaluator/MaterialList.vue') }
+// 教师
+{ path: 'materials', name: 'TeacherMaterials', component: () => import('@/views/teacher/MaterialList.vue') }
+```
+
+#### 3. 编译验证 ✅
+
+- 后端编译: `mvn clean compile` → BUILD SUCCESS
+- 后端打包: `mvn clean package -DskipTests` → BUILD SUCCESS
+- 前端构建: `npm run build` → built in 562ms
+
+#### 4. DataInitializer更新 ✅
+
+增加默认考核周期数据初始化：
+
+```java
+if (periodRepository.count() == 0) {
+    EvaluationPeriod period = new EvaluationPeriod();
+    period.setName("2024学年第一学期");
+    period.setStartDate(LocalDate.of(2024, 9, 1));
+    period.setEndDate(LocalDate.of(2025, 1, 31));
+    period.setDescription("2024学年第一学期教师考核");
+    period.setStatus(EvaluationPeriod.Status.active);
+    periodRepository.save(period);
+}
+```
+
+### 项目状态总结
+
+#### 已完成功能
+- ✅ 用户角色系统（管理员、考核员、教师）
+- ✅ 考核周期管理
+- ✅ 教师文档上传
+- ✅ 考核员评分功能
+- ✅ 教师查看成绩
+- ✅ 管理员数据概览
+- ✅ **文档上传问题修复**
+- ✅ **学习资料功能（新增）**
+
+#### 待测试验证
+- 文档上传功能（修复后）
+- 学习资料上传/下载功能
+
+---
+
+**最后更新**：2026年4月3日 20:05
+
+**文档版本**：1.6
+
+---
+
+## 实施进展记录 (2026年4月3日 - 考核报名功能开发)
+
+### 功能需求
+
+1. 管理员发布考核周期并启用后，教师需要先报名对应的周期
+2. 报名后才能：下载学习资料、上传作业文档、被考核员评分
+3. 管理员在"考核周期"页可以查看已报名的老师，并踢出老师
+4. 考核员页面改为"考核周期"维度，只能查看已报名老师的作业和评分
+
+### 数据库设计
+
+**新增表: period_enrollments**
+
+```sql
+CREATE TABLE IF NOT EXISTS period_enrollments (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    period_id BIGINT NOT NULL,
+    teacher_id BIGINT NOT NULL,
+    enrolled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('enrolled', 'removed') DEFAULT 'enrolled',
+    UNIQUE KEY uk_period_teacher (period_id, teacher_id)
+);
+```
+
+### 后端实现
+
+| 文件 | 说明 |
+|------|------|
+| `entity/PeriodEnrollment.java` | 报名实体类 |
+| `repository/PeriodEnrollmentRepository.java` | 数据访问层 |
+| `service/EnrollmentService.java` | 报名业务逻辑 |
+| `controller/PeriodController.java` | 扩展API |
+
+**新增API**:
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| POST | /api/periods/{id}/enroll | teacher | 教师报名 |
+| GET | /api/periods/{id}/enrollments | admin/evaluator | 获取已报名老师 |
+| DELETE | /api/periods/{id}/enrollments/{teacherId} | admin | 踢出老师 |
+| GET | /api/periods/available | teacher | 可报名周期 |
+| GET | /api/periods/my-enrollments | teacher | 我的报名 |
+| GET | /api/periods/enrolled-teachers | admin/evaluator | 已报名教师列表 |
+
+### 权限校验修改
+
+1. **文档上传**: 增加"已报名"校验，未报名无法上传
+2. **学习资料下载**: 增加"已报名"校验，管理员/考核员除外
+
+### 前端实现
+
+| 文件 | 说明 |
+|------|------|
+| `api/period.ts` | 新增报名相关API |
+| `views/teacher/Enrollment.vue` | 教师报名页面 |
+| `views/admin/PeriodManage.vue` | 增加查看报名功能 |
+| `views/evaluator/PeriodManage.vue` | 考核员周期页面(替换教师列表) |
+
+### 流程变更
+
+```
+【新流程】
+1. 管理员创建并启用考核周期
+2. 教师先报名周期 → 报名后才能：
+   - 下载学习资料
+   - 上传作业文档
+   - 被考核员评分
+3. 管理员/考核员 查看已报名老师
+```
+
+### 编译验证 ✅
+
+- 后端编译: `mvn clean compile` → BUILD SUCCESS (33 files)
+- 前端构建: `npm run build` → built in 673ms
+
+### 项目状态总结
+
+#### 已完成功能
+- ✅ 用户角色系统
+- ✅ 考核周期管理
+- ✅ 教师报名功能
+- ✅ 教师文档上传(需先报名)
+- ✅ 考核员评分功能
+- ✅ 教师查看成绩
+- ✅ 管理员数据概览
+- ✅ 学习资料功能
+- ✅ **考核报名功能(新增)**
+
+---
+
+**最后更新**：2026年4月3日 20:45
+
+**文档版本**：1.7

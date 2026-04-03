@@ -11,6 +11,10 @@
       router
     >
       <template v-if="userStore.user?.role === 'teacher'">
+        <el-menu-item index="/teacher/enrollment">
+          <el-icon><Calendar /></el-icon>
+          <span>我的考核</span>
+        </el-menu-item>
         <el-menu-item index="/teacher/documents">
           <el-icon><Document /></el-icon>
           <span>我的文档</span>
@@ -23,11 +27,19 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>我的成绩</span>
         </el-menu-item>
+        <el-menu-item index="/teacher/materials">
+          <el-icon><Folder /></el-icon>
+          <span>学习资料</span>
+        </el-menu-item>
       </template>
       <template v-else-if="userStore.user?.role === 'evaluator'">
-        <el-menu-item index="/evaluator/teachers">
-          <el-icon><User /></el-icon>
-          <span>教师列表</span>
+        <el-menu-item index="/evaluator/periods">
+          <el-icon><Calendar /></el-icon>
+          <span>考核周期</span>
+        </el-menu-item>
+        <el-menu-item index="/evaluator/materials">
+          <el-icon><Folder /></el-icon>
+          <span>学习资料</span>
         </el-menu-item>
       </template>
       <template v-else-if="userStore.user?.role === 'admin'">
@@ -43,6 +55,10 @@
           <el-icon><Calendar /></el-icon>
           <span>考核周期</span>
         </el-menu-item>
+        <el-menu-item index="/admin/materials">
+          <el-icon><Folder /></el-icon>
+          <span>学习资料</span>
+        </el-menu-item>
       </template>
     </el-menu>
   </div>
@@ -52,7 +68,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { Document, Upload, DataAnalysis, User, Calendar } from '@element-plus/icons-vue'
+import { Document, Upload, DataAnalysis, User, Calendar, Folder } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const userStore = useUserStore()

@@ -86,5 +86,38 @@ INSERT INTO users (username, password, real_name, role, department) VALUES
 INSERT INTO evaluation_periods (name, start_date, end_date, description, status) VALUES
 ('2024学年第一学期', '2024-09-01', '2025-01-31', '2024学年第一学期教师考核', 'active');
 
+-- 学习资料表
+CREATE TABLE IF NOT EXISTS learning_materials (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    period_id BIGINT NOT NULL COMMENT '考核周期ID',
+    title VARCHAR(200) NOT NULL COMMENT '资料标题',
+    file_path VARCHAR(500) NOT NULL COMMENT 'MinIO存储路径',
+    file_name VARCHAR(200) NOT NULL COMMENT '原始文件名',
+    file_size BIGINT COMMENT '文件大小',
+    file_type VARCHAR(100) COMMENT 'MIME类型',
+    description VARCHAR(500) COMMENT '资料描述',
+    created_by BIGINT NOT NULL COMMENT '上传人ID',
+    is_deleted TINYINT DEFAULT 0 COMMENT '软删除: 0否 1是',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_period_id (period_id),
+    INDEX idx_created_by (created_by),
+    INDEX idx_is_deleted (is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学习资料表';
+
+-- 考核周期报名表
+CREATE TABLE IF NOT EXISTS period_enrollments (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    period_id BIGINT NOT NULL COMMENT '考核周期ID',
+    teacher_id BIGINT NOT NULL COMMENT '教师ID',
+    enrolled_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '报名时间',
+    status ENUM('enrolled', 'removed') DEFAULT 'enrolled' COMMENT '状态',
+    INDEX idx_period_id (period_id),
+    INDEX idx_teacher_id (teacher_id),
+    UNIQUE KEY uk_period_teacher (period_id, teacher_id),
+    FOREIGN KEY (period_id) REFERENCES evaluation_periods(id),
+    FOREIGN KEY (teacher_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='考核周期报名表';
+
 -- 注意: demo123 的 BCrypt hash 是 $2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH
 -- 这个hash可能不匹配实际密码，建议首次登录后使用系统的密码重置功能

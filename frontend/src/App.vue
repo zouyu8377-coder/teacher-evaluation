@@ -13,18 +13,6 @@ onMounted(() => {
 })
 </script>
 
-<style>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-}
-
-#app {
-  min-height: 100vh;
-}
+<style scoped>
+/* 应用特定的样式可以放在这里 */
 </style>

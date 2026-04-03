@@ -25,6 +25,7 @@ public class DocumentService {
     
     private final DocumentRepository documentRepository;
     private final MinioConfig minioConfig;
+    private final EnrollmentService enrollmentService;
     
     public Page<Document> getDocuments(Long userId, Long periodId, int page, int size) {
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -54,6 +55,10 @@ public class DocumentService {
     @Transactional
     public Document uploadDocument(MultipartFile file, Long userId, Long periodId, 
                                     String title, String description) throws Exception {
+        if (!enrollmentService.isEnrolled(periodId, userId)) {
+            throw new RuntimeException("您尚未报名该考核周期，无法上传文档");
+        }
+        
         String bucketName = minioConfig.getBucketName();
         MinioClient minioClient = minioConfig.minioClient();
         

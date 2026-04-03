@@ -61,8 +61,8 @@ const handleLogin = async () => {
       
       const role = res.data.user.role
       if (role === 'admin') router.push('/admin/dashboard')
-      else if (role === 'evaluator') router.push('/evaluator/teachers')
-      else if (role === 'teacher') router.push('/teacher/documents')
+      else if (role === 'evaluator') router.push('/evaluator/periods')
+      else if (role === 'teacher') router.push('/teacher/enrollment')
       else router.push('/')
     } else {
       ElMessage.error(res.message || '登录失败')

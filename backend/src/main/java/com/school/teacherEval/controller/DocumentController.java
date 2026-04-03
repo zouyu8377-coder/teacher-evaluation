@@ -5,6 +5,7 @@ import com.school.teacherEval.entity.Document;
 import com.school.teacherEval.entity.EvaluationPeriod;
 import com.school.teacherEval.entity.User;
 import com.school.teacherEval.service.DocumentService;
+import com.school.teacherEval.service.EnrollmentService;
 import com.school.teacherEval.service.EvaluationPeriodService;
 import com.school.teacherEval.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,6 +23,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -34,6 +36,7 @@ public class DocumentController {
     private final DocumentService documentService;
     private final UserService userService;
     private final EvaluationPeriodService periodService;
+    private final EnrollmentService enrollmentService;
     
     @GetMapping
     @Operation(summary = "获取文档列表")
@@ -50,6 +53,16 @@ public class DocumentController {
         // 如果是教师，只能查看自己的文档
         if (currentUser.getRole() == User.Role.teacher) {
             userId = currentUser.getId();
+        }
+        
+        // 考核员只能看到已报名周期的文档
+        if (currentUser.getRole() == User.Role.evaluator && periodId == null) {
+            List<EvaluationPeriod> periods = periodService.getAllPeriods().stream()
+                    .filter(p -> p.getStatus() == EvaluationPeriod.Status.active)
+                    .collect(Collectors.toList());
+            if (!periods.isEmpty()) {
+                periodId = periods.get(0).getId();
+            }
         }
         
         Page<Document> docPage = documentService.getDocuments(userId, periodId, page, size);

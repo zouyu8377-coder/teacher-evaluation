@@ -21,7 +21,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200">
+        <el-table-column label="操作" width="250">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
             <el-button 
@@ -31,6 +31,7 @@
             >
               {{ row.status === 'active' ? '禁用' : '启用' }}
             </el-button>
+            <el-button type="info" link @click="showEnrollments(row)">报名({{ row.enrolledCount || 0 }})</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -57,19 +58,38 @@
         <el-button type="primary" :loading="loading" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="enrollmentDialogVisible" :title="`已报名老师 - ${currentPeriod?.name}`" width="600px">
+      <el-table :data="enrolledTeachers" v-loading="enrollmentLoading">
+        <el-table-column prop="id" label="ID" width="60" />
+        <el-table-column prop="realName" label="姓名" />
+        <el-table-column prop="department" label="所属教研组" />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-button type="danger" link @click="handleRemoveTeacher(row)">踢出</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="enrolledTeachers.length === 0 && !enrollmentLoading" description="暂无已报名老师" />
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getPeriodList, createPeriod, updatePeriod, deletePeriod } from '@/api/period'
+import { getPeriodList, createPeriod, updatePeriod, deletePeriod, getPeriodEnrollments, removeEnrollment } from '@/api/period'
 
 const tableData = ref<any[]>([])
 const dialogVisible = ref(false)
 const formRef = ref()
 const loading = ref(false)
 const editId = ref<number | null>(null)
+
+const enrollmentDialogVisible = ref(false)
+const enrollmentLoading = ref(false)
+const currentPeriod = ref<any>(null)
+const enrolledTeachers = ref<any[]>([])
 
 const form = reactive({
   name: '',
@@ -144,6 +164,31 @@ const handleDelete = async (row: any) => {
   const res = await deletePeriod(row.id)
   if (res.code === 200) {
     ElMessage.success('删除成功')
+    loadData()
+  }
+}
+
+const showEnrollments = async (row: any) => {
+  currentPeriod.value = row
+  enrollmentDialogVisible.value = true
+  enrollmentLoading.value = true
+  
+  try {
+    const res = await getPeriodEnrollments(row.id)
+    if (res.code === 200) {
+      enrolledTeachers.value = res.data
+    }
+  } finally {
+    enrollmentLoading.value = false
+  }
+}
+
+const handleRemoveTeacher = async (teacher: any) => {
+  await ElMessageBox.confirm('确定要踢出该老师吗？', '提示', { type: 'warning' })
+  const res = await removeEnrollment(currentPeriod.value.id, teacher.id)
+  if (res.code === 200) {
+    ElMessage.success('已踢出')
+    showEnrollments(currentPeriod.value)
     loadData()
   }
 }

@@ -14,8 +14,8 @@ const routes: RouteRecordRaw[] = [
       const userStore = useUserStore()
       const role = userStore.user?.role
       if (role === 'admin') return '/admin/dashboard'
-      if (role === 'evaluator') return '/evaluator/teachers'
-      if (role === 'teacher') return '/teacher/documents'
+      if (role === 'evaluator') return '/evaluator/periods'
+      if (role === 'teacher') return '/teacher/enrollment'
       return '/login'
     }
   },
@@ -38,6 +38,16 @@ const routes: RouteRecordRaw[] = [
         path: 'scores',
         name: 'TeacherScores',
         component: () => import('@/views/teacher/MyScores.vue')
+      },
+      {
+        path: 'materials',
+        name: 'TeacherMaterials',
+        component: () => import('@/views/teacher/MaterialList.vue')
+      },
+      {
+        path: 'enrollment',
+        name: 'TeacherEnrollment',
+        component: () => import('@/views/teacher/Enrollment.vue')
       }
     ]
   },
@@ -47,9 +57,14 @@ const routes: RouteRecordRaw[] = [
     meta: { role: 'evaluator' },
     children: [
       {
-        path: 'teachers',
-        name: 'EvaluatorTeachers',
-        component: () => import('@/views/evaluator/TeacherList.vue')
+        path: 'periods',
+        name: 'EvaluatorPeriods',
+        component: () => import('@/views/evaluator/PeriodManage.vue')
+      },
+      {
+        path: 'materials',
+        name: 'EvaluatorMaterials',
+        component: () => import('@/views/evaluator/MaterialList.vue')
       },
       {
         path: 'documents/:teacherId',
@@ -82,6 +97,11 @@ const routes: RouteRecordRaw[] = [
         path: 'periods',
         name: 'AdminPeriods',
         component: () => import('@/views/admin/PeriodManage.vue')
+      },
+      {
+        path: 'materials',
+        name: 'AdminMaterials',
+        component: () => import('@/views/admin/MaterialManage.vue')
       }
     ]
   }
