@@ -9,9 +9,9 @@
       </template>
 
       <el-form inline>
-        <el-form-item label="考核周期">
-          <el-select v-model="query.periodId" placeholder="请选择" clearable @change="loadData">
-            <el-option v-for="p in periods" :key="p.id" :label="p.name" :value="p.id" />
+        <el-form-item label="活动">
+          <el-select v-model="query.activityId" placeholder="请选择" clearable @change="loadData">
+            <el-option v-for="p in activities" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -19,7 +19,7 @@
       <el-table :data="tableData" stripe>
         <el-table-column prop="title" label="文档标题" />
         <el-table-column prop="fileName" label="文件名" />
-        <el-table-column prop="periodName" label="考核周期" />
+        <el-table-column prop="activityName" label="活动" />
         <el-table-column prop="description" label="描述" show-overflow-tooltip />
         <el-table-column prop="createdAt" label="上传时间" />
         <el-table-column label="操作" width="100">
@@ -46,27 +46,28 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getDocumentList, downloadDocument } from '@/api/document'
-import { getPeriodList } from '@/api/period'
+import { getActivityList } from '@/api/activity'
 
 const route = useRoute()
 const teacherId = computed(() => Number(route.params.teacherId))
+const activityIdParam = computed(() => route.query.activityId ? Number(route.query.activityId) : null)
 const teacherName = ref('')
 
 const query = reactive({
   page: 1,
   size: 10,
-  periodId: null as number | null
+  activityId: null as number | null
 })
 
 const tableData = ref<any[]>([])
 const total = ref(0)
-const periods = ref<any[]>([])
+const activities = ref<any[]>([])
 
 const loadData = async () => {
   const res = await getDocumentList({
     page: query.page,
     size: query.size,
-    periodId: query.periodId || undefined,
+    activityId: query.activityId || activityIdParam.value || undefined,
     userId: teacherId.value
   })
   if (res.code === 200) {
@@ -78,10 +79,10 @@ const loadData = async () => {
   }
 }
 
-const loadPeriods = async () => {
-  const res = await getPeriodList()
+const loadActivities = async () => {
+  const res = await getActivityList()
   if (res.code === 200) {
-    periods.value = res.data
+    activities.value = res.data
   }
 }
 
@@ -96,7 +97,7 @@ const handleDownload = async (row: any) => {
 
 onMounted(() => {
   loadData()
-  loadPeriods()
+  loadActivities()
 })
 </script>
 

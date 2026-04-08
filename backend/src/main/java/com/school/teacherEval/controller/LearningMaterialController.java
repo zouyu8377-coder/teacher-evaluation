@@ -1,10 +1,10 @@
 package com.school.teacherEval.controller;
 
 import com.school.teacherEval.dto.ApiResponse;
-import com.school.teacherEval.entity.EvaluationPeriod;
+import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.LearningMaterial;
 import com.school.teacherEval.entity.User;
-import com.school.teacherEval.service.EvaluationPeriodService;
+import com.school.teacherEval.service.ActivityService;
 import com.school.teacherEval.service.LearningMaterialService;
 import com.school.teacherEval.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,16 +33,16 @@ public class LearningMaterialController {
     
     private final LearningMaterialService materialService;
     private final UserService userService;
-    private final EvaluationPeriodService periodService;
+    private final ActivityService activityService;
     
     @GetMapping
     @Operation(summary = "获取学习资料列表")
     public ApiResponse<Map<String, Object>> getMaterials(
-            @RequestParam(required = false) Long periodId,
+            @RequestParam(required = false) Long activityId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
         
-        Page<LearningMaterial> materialPage = materialService.getMaterials(periodId, page, size);
+        Page<LearningMaterial> materialPage = materialService.getMaterials(activityId, page, size);
         
         Map<String, Object> data = new HashMap<>();
         data.put("records", materialPage.getContent().stream().map(this::toVO).collect(Collectors.toList()));
@@ -65,7 +65,7 @@ public class LearningMaterialController {
     @PreAuthorize("hasRole('admin')")
     public ApiResponse<LearningMaterial> uploadMaterial(
             @RequestParam("file") MultipartFile file,
-            @RequestParam("periodId") Long periodId,
+            @RequestParam("activityId") Long activityId,
             @RequestParam("title") String title,
             @RequestParam(value = "description", required = false) String description) throws Exception {
         
@@ -74,7 +74,7 @@ public class LearningMaterialController {
         User currentUser = userService.getCurrentUser(username);
         
         LearningMaterial material = materialService.uploadMaterial(
-                file, periodId, title, description, currentUser.getId());
+                file, activityId, title, description, currentUser.getId());
         
         return ApiResponse.success(material);
     }
@@ -138,7 +138,7 @@ public class LearningMaterialController {
     private Map<String, Object> toVO(LearningMaterial material) {
         Map<String, Object> map = new HashMap<>();
         map.put("id", material.getId());
-        map.put("periodId", material.getPeriodId());
+        map.put("activityId", material.getActivityId());
         map.put("title", material.getTitle());
         map.put("fileName", material.getFileName());
         map.put("fileSize", material.getFileSize());
@@ -155,10 +155,12 @@ public class LearningMaterialController {
         }
         
         try {
-            EvaluationPeriod period = periodService.getPeriodById(material.getPeriodId());
-            map.put("periodName", period.getName());
+            if (material.getActivityId() != null) {
+                Activity activity = activityService.getById(material.getActivityId());
+                map.put("activityName", activity.getName());
+            }
         } catch (Exception e) {
-            map.put("periodName", "");
+            map.put("activityName", "");
         }
         
         return map;

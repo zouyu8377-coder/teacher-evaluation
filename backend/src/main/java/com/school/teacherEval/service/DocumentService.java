@@ -27,17 +27,17 @@ public class DocumentService {
     private final MinioConfig minioConfig;
     private final EnrollmentService enrollmentService;
     
-    public Page<Document> getDocuments(Long userId, Long periodId, int page, int size) {
+    public Page<Document> getDocuments(Long userId, Long activityId, int page, int size) {
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         
-        if (userId != null && periodId != null) {
-            return documentRepository.findByUserIdAndPeriodId(userId, periodId, pageable);
+        if (userId != null && activityId != null) {
+            return documentRepository.findByUserIdAndActivityId(userId, activityId, pageable);
         }
         if (userId != null) {
             return documentRepository.findByUserId(userId, pageable);
         }
-        if (periodId != null) {
-            return documentRepository.findByPeriodId(periodId, pageable);
+        if (activityId != null) {
+            return documentRepository.findByActivityId(activityId, pageable);
         }
         
         return documentRepository.findAllActive(pageable);
@@ -53,21 +53,19 @@ public class DocumentService {
     }
     
     @Transactional
-    public Document uploadDocument(MultipartFile file, Long userId, Long periodId, 
+    public Document uploadDocument(MultipartFile file, Long userId, Long activityId,
                                     String title, String description) throws Exception {
-        if (!enrollmentService.isEnrolled(periodId, userId)) {
-            throw new RuntimeException("您尚未报名该考核周期，无法上传文档");
+        if (!enrollmentService.isEnrolledByActivity(activityId, userId)) {
+            throw new RuntimeException("您尚未报名该活动，无法上传文档");
         }
         
         String bucketName = minioConfig.getBucketName();
         MinioClient minioClient = minioConfig.minioClient();
         
-        // 创建 bucket（如果不存在）
         if (!minioClient.bucketExists(io.minio.BucketExistsArgs.builder().bucket(bucketName).build())) {
             minioClient.makeBucket(io.minio.MakeBucketArgs.builder().bucket(bucketName).build());
         }
         
-        // 生成唯一文件名
         String originalFilename = file.getOriginalFilename();
         String extension = "";
         if (originalFilename != null && originalFilename.contains(".")) {
@@ -75,7 +73,6 @@ public class DocumentService {
         }
         String filePath = "documents/" + userId + "/" + UUID.randomUUID() + extension;
         
-        // 上传到 MinIO
         minioClient.putObject(PutObjectArgs.builder()
                 .bucket(bucketName)
                 .object(filePath)
@@ -83,10 +80,9 @@ public class DocumentService {
                 .contentType(file.getContentType())
                 .build());
         
-        // 保存记录到数据库
         Document document = new Document();
         document.setUserId(userId);
-        document.setPeriodId(periodId);
+        document.setActivityId(activityId);
         document.setTitle(title);
         document.setFilePath(filePath);
         document.setFileName(originalFilename);
@@ -101,7 +97,6 @@ public class DocumentService {
     public Document updateDocument(Long id, Long userId, String title, String description) {
         Document document = getDocumentById(id);
         
-        // 验证权限
         if (!document.getUserId().equals(userId)) {
             throw new RuntimeException("无权限修改此文档");
         }
@@ -120,23 +115,19 @@ public class DocumentService {
     public void deleteDocument(Long id, Long userId, String role) {
         Document document = getDocumentById(id);
         
-        // 验证权限：只有上传者本人或管理员可以删除
         if (!document.getUserId().equals(userId) && !role.equals("admin")) {
             throw new RuntimeException("无权限删除此文档");
         }
         
-        // 软删除
         document.setIsDeleted(1);
         documentRepository.save(document);
         
-        // 从 MinIO 删除文件
         try {
             minioConfig.minioClient().removeObject(RemoveObjectArgs.builder()
                     .bucket(minioConfig.getBucketName())
                     .object(document.getFilePath())
                     .build());
         } catch (Exception e) {
-            // 记录日志但不影响删除操作
         }
     }
     

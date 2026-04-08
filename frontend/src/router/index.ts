@@ -14,7 +14,7 @@ const routes: RouteRecordRaw[] = [
       const userStore = useUserStore()
       const role = userStore.user?.role
       if (role === 'admin') return '/admin/dashboard'
-      if (role === 'evaluator') return '/evaluator/periods'
+      if (role === 'evaluator') return '/evaluator/activities'
       if (role === 'teacher') return '/teacher/enrollment'
       return '/login'
     }
@@ -40,14 +40,19 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/teacher/MyScores.vue')
       },
       {
+        path: 'enrollment',
+        name: 'TeacherEnrollment',
+        component: () => import('@/views/teacher/Enrollment.vue')
+      },
+      {
         path: 'materials',
         name: 'TeacherMaterials',
         component: () => import('@/views/teacher/MaterialList.vue')
       },
       {
-        path: 'enrollment',
-        name: 'TeacherEnrollment',
-        component: () => import('@/views/teacher/Enrollment.vue')
+        path: 'exam',
+        name: 'TeacherExam',
+        component: () => import('@/views/teacher/ExamPaper.vue')
       }
     ]
   },
@@ -57,14 +62,14 @@ const routes: RouteRecordRaw[] = [
     meta: { role: 'evaluator' },
     children: [
       {
-        path: 'periods',
-        name: 'EvaluatorPeriods',
-        component: () => import('@/views/evaluator/PeriodManage.vue')
+        path: 'activities',
+        name: 'EvaluatorActivities',
+        component: () => import('@/views/evaluator/ActivityManage.vue')
       },
       {
-        path: 'materials',
-        name: 'EvaluatorMaterials',
-        component: () => import('@/views/evaluator/MaterialList.vue')
+        path: 'exams',
+        name: 'EvaluatorExams',
+        component: () => import('@/views/evaluator/ExamRecords.vue')
       },
       {
         path: 'documents/:teacherId',
@@ -94,14 +99,19 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/UserManage.vue')
       },
       {
-        path: 'periods',
-        name: 'AdminPeriods',
-        component: () => import('@/views/admin/PeriodManage.vue')
+        path: 'activities',
+        name: 'AdminActivities',
+        component: () => import('@/views/admin/ActivityManage.vue')
       },
       {
-        path: 'materials',
-        name: 'AdminMaterials',
-        component: () => import('@/views/admin/MaterialManage.vue')
+        path: 'questions',
+        name: 'AdminQuestions',
+        component: () => import('@/views/admin/QuestionManage.vue')
+      },
+      {
+        path: 'papers',
+        name: 'AdminPapers',
+        component: () => import('@/views/admin/PaperManage.vue')
       }
     ]
   }
@@ -115,6 +125,15 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
   userStore.initUser()
+  
+  if (to.path === '/admin/periods') {
+    next('/admin/activities')
+    return
+  }
+  if (to.path === '/evaluator/periods') {
+    next('/evaluator/activities')
+    return
+  }
   
   if (to.path === '/login') {
     if (userStore.token) {

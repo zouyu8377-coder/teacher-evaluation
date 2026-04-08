@@ -24,3 +24,7 @@ export const createUser = (data: {
 export const getTeachers = () => {
   return api.get('/users/teachers')
 }
+
+export const getEvaluators = () => {
+  return api.get('/users/evaluators')
+}

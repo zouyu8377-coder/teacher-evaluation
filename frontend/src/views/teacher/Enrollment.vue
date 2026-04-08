@@ -8,41 +8,76 @@
       </template>
       
       <el-tabs v-model="activeTab">
-        <el-tab-pane label="已报名周期" name="enrolled">
-          <el-table :data="myPeriods" stripe v-loading="loading">
-            <el-table-column prop="name" label="考核周期" />
-            <el-table-column prop="startDate" label="开始日期" />
-            <el-table-column prop="endDate" label="结束日期" />
-            <el-table-column prop="status" label="状态">
+        <el-tab-pane label="已报名活动" name="enrolled">
+          <el-table :data="myActivities" stripe v-loading="loading">
+            <el-table-column prop="activityName" label="活动名称" />
+            <el-table-column prop="level" label="级别">
               <template #default="{ row }">
-                <el-tag :type="row.status === 'active' ? 'success' : 'info'">
-                  {{ row.status === 'active' ? '进行中' : row.status }}
-                </el-tag>
+                <el-tag :type="getLevelType(row.level)">{{ row.level }}级</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="200">
+            <el-table-column prop="enrolledAt" label="报名时间" width="180">
               <template #default="{ row }">
-                <el-button type="primary" link @click="goToUpload(row)">上传文档</el-button>
-                <el-button type="primary" link @click="goToMaterials(row)">学习资料</el-button>
+                {{ formatDateTime(row.enrolledAt) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="250">
+              <template #default="{ row }">
+                <template v-if="row.level === 'C' && row.hasExam">
+                  <el-button type="primary" link @click="goToExam(row)">开始考试</el-button>
+                </template>
+                <template v-else>
+                  <el-button type="primary" link @click="goToUpload(row)">上传文档</el-button>
+                </template>
               </template>
             </el-table-column>
           </el-table>
-          <el-empty v-if="myPeriods.length === 0 && !loading" description="暂无已报名周期" />
+          <el-empty v-if="myActivities.length === 0 && !loading" description="暂未报名任何活动" />
         </el-tab-pane>
         
-        <el-tab-pane label="报名新周期" name="available">
-          <el-table :data="availablePeriods" stripe v-loading="loading">
-            <el-table-column prop="name" label="考核周期" />
-            <el-table-column prop="startDate" label="开始日期" />
-            <el-table-column prop="endDate" label="结束日期" />
+        <el-tab-pane label="报名新活动" name="available">
+          <el-table :data="availableActivities" stripe v-loading="loading">
+            <el-table-column prop="name" label="活动名称" />
+            <el-table-column prop="level" label="级别">
+              <template #default="{ row }">
+                <el-tag :type="getLevelType(row.level)">{{ row.level }}级</el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="description" label="说明" show-overflow-tooltip />
+            <el-table-column label="考核时间" width="180">
+              <template #default="{ row }">
+                {{ row.startDate || '-' }} ~ {{ row.endDate || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="报名余量" width="100">
+              <template #default="{ row }">
+                <span v-if="row.enrollmentInfo" :class="{ 'text-danger': row.enrollmentInfo.remaining === 0 }">
+                  {{ row.enrollmentInfo.remaining === -1 ? '不限' : `${row.enrollmentInfo.remaining}/${row.enrollmentInfo.maxParticipants}` }}
+                </span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="报名时间" width="180">
+              <template #default="{ row }">
+                <span v-if="row.enrollmentInfo">
+                  {{ formatDateTime(row.enrollmentInfo.enrollmentStart) }} ~ {{ formatDateTime(row.enrollmentInfo.enrollmentEnd) }}
+                </span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="100">
               <template #default="{ row }">
-                <el-button type="primary" @click="handleEnroll(row)">报名</el-button>
+                <el-button 
+                  type="primary" 
+                  @click="handleEnroll(row)" 
+                  :disabled="!row.canEnroll || (row.enrollmentInfo && row.enrollmentInfo.remaining === 0)"
+                >
+                  报名
+                </el-button>
               </template>
             </el-table-column>
           </el-table>
-          <el-empty v-if="availablePeriods.length === 0 && !loading" description="暂无可报名周期" />
+          <el-empty v-if="availableActivities.length === 0 && !loading" description="暂无可报名活动" />
         </el-tab-pane>
       </el-tabs>
     </el-card>
@@ -53,62 +88,90 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getAvailablePeriods, getMyEnrollments, enrollPeriod } from '@/api/period'
+import { getMyEnrollments, enrollActivity, getAvailableActivitiesList, canEnrollActivity, getEnrollmentInfo } from '@/api/activity'
 
 const router = useRouter()
 const activeTab = ref('enrolled')
 const loading = ref(false)
-const myPeriods = ref<any[]>([])
-const availablePeriods = ref<any[]>([])
+const availableActivities = ref<any[]>([])
+const myActivities = ref<any[]>([])
 
-const loadMyEnrollments = async () => {
+const formatDateTime = (datetime: string | null) => {
+  if (!datetime) return '-'
+  return datetime.slice(0, 16).replace('T', ' ')
+}
+
+const getLevelType = (level: string) => {
+  const types: Record<string, string> = {
+    'C': 'info',
+    'B2': 'primary',
+    'B1': 'success',
+    'A2': 'warning',
+    'A1': 'danger'
+  }
+  return types[level] || 'info'
+}
+
+const loadAvailableActivities = async () => {
   loading.value = true
   try {
-    const res = await getMyEnrollments()
+    const res = await getAvailableActivitiesList()
     if (res.code === 200) {
-      myPeriods.value = res.data
+      const activities = res.data || []
+      for (const activity of activities) {
+        try {
+          const checkRes = await canEnrollActivity(activity.id)
+          activity.canEnroll = checkRes.data
+        } catch {
+          activity.canEnroll = false
+        }
+        try {
+          const infoRes = await getEnrollmentInfo(activity.id)
+          activity.enrollmentInfo = infoRes.data
+        } catch {
+          activity.enrollmentInfo = null
+        }
+      }
+      availableActivities.value = activities
     }
   } finally {
     loading.value = false
   }
 }
 
-const loadAvailablePeriods = async () => {
-  loading.value = true
-  try {
-    const res = await getAvailablePeriods()
-    if (res.code === 200) {
-      availablePeriods.value = res.data
-    }
-  } finally {
-    loading.value = false
+const loadMyActivities = async () => {
+  const res = await getMyEnrollments()
+  if (res.code === 200) {
+    myActivities.value = res.data || []
   }
 }
 
 const handleEnroll = async (row: any) => {
   try {
-    const res = await enrollPeriod(row.id)
+    const res = await enrollActivity(row.id)
     if (res.code === 200) {
-      ElMessage.success('报名成功')
-      loadMyEnrollments()
-      loadAvailablePeriods()
+      ElMessage.success('报名成功！您现在可以上传考核文档和查看学习资料。')
+      loadAvailableActivities()
+      loadMyActivities()
+      activeTab.value = 'enrolled'
     }
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '报名失败')
+    const msg = e.response?.data?.message || '报名失败'
+    ElMessage.error(msg)
   }
 }
 
 const goToUpload = (row: any) => {
-  router.push({ path: '/teacher/upload', query: { periodId: row.id } })
+  router.push({ path: '/teacher/upload', query: { activityId: row.activityId } })
 }
 
-const goToMaterials = (row: any) => {
-  router.push('/teacher/materials')
+const goToExam = (row: any) => {
+  router.push({ path: '/teacher/exam', query: { activityId: row.activityId } })
 }
 
-onMounted(() => {
-  loadMyEnrollments()
-  loadAvailablePeriods()
+onMounted(async () => {
+  await loadMyActivities()
+  await loadAvailableActivities()
 })
 </script>
 
@@ -117,5 +180,9 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.text-danger {
+  color: #f56c6c;
+  font-weight: bold;
 }
 </style>

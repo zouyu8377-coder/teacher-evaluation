@@ -6,15 +6,15 @@
       </template>
       
       <el-form inline>
-        <el-form-item label="考核周期">
-          <el-select v-model="query.periodId" placeholder="请选择" clearable @change="loadData">
-            <el-option v-for="p in periods" :key="p.id" :label="p.name" :value="p.id" />
+        <el-form-item label="活动">
+          <el-select v-model="query.activityId" placeholder="请选择" clearable @change="loadData">
+            <el-option v-for="p in activities" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
       </el-form>
 
       <el-table :data="tableData" stripe>
-        <el-table-column prop="periodName" label="考核周期" />
+        <el-table-column prop="activityName" label="活动" />
         <el-table-column prop="score" label="得分">
           <template #default="{ row }">
             <el-tag :type="row.score >= 90 ? 'success' : row.score >= 60 ? 'warning' : 'danger'">
@@ -48,28 +48,28 @@
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getMyScores } from '@/api/evaluation'
-import { getPeriodList } from '@/api/period'
+import { getActivityList } from '@/api/activity'
 
 const query = reactive({
-  periodId: null as number | null
+  activityId: null as number | null
 })
 
 const tableData = ref<any[]>([])
-const periods = ref<any[]>([])
+const activities = ref<any[]>([])
 const dialogVisible = ref(false)
 const currentRow = ref<any>(null)
 
 const loadData = async () => {
-  const res = await getMyScores(query.periodId || undefined)
+  const res = await getMyScores({ activityId: query.activityId || undefined })
   if (res.code === 200) {
     tableData.value = res.data
   }
 }
 
-const loadPeriods = async () => {
-  const res = await getPeriodList()
+const loadActivities = async () => {
+  const res = await getActivityList()
   if (res.code === 200) {
-    periods.value = res.data
+    activities.value = res.data
   }
 }
 
@@ -80,7 +80,7 @@ const showDetail = (row: any) => {
 
 onMounted(() => {
   loadData()
-  loadPeriods()
+  loadActivities()
 })
 </script>
 

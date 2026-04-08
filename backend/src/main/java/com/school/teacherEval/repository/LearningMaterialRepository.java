@@ -11,8 +11,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface LearningMaterialRepository extends JpaRepository<LearningMaterial, Long> {
     
-    @Query("SELECT m FROM LearningMaterial m WHERE m.isDeleted = 0 AND m.periodId = :periodId ORDER BY m.createdAt DESC")
-    Page<LearningMaterial> findByPeriodId(@Param("periodId") Long periodId, Pageable pageable);
+    @Query("SELECT m FROM LearningMaterial m WHERE m.isDeleted = 0 AND m.activityId = :activityId ORDER BY m.createdAt DESC")
+    Page<LearningMaterial> findByActivityId(@Param("activityId") Long activityId, Pageable pageable);
     
     @Query("SELECT m FROM LearningMaterial m WHERE m.isDeleted = 0 ORDER BY m.createdAt DESC")
     Page<LearningMaterial> findAllActive(Pageable pageable);

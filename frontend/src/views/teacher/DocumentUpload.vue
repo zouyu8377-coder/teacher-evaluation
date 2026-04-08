@@ -6,9 +6,9 @@
       </template>
       
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
-        <el-form-item label="考核周期" prop="periodId">
-          <el-select v-model="form.periodId" placeholder="请选择考核周期">
-            <el-option v-for="p in periods" :key="p.id" :label="p.name" :value="p.id" />
+        <el-form-item label="活动" prop="activityId">
+          <el-select v-model="form.activityId" placeholder="请选择活动">
+            <el-option v-for="a in activities" :key="a.id" :label="`${a.level}级 - ${a.name}`" :value="a.id" />
           </el-select>
         </el-form-item>
         
@@ -51,37 +51,41 @@
 
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { uploadDocument } from '@/api/document'
-import { getPeriodList } from '@/api/period'
+import { getActivityList, getAvailableActivitiesForTeacher } from '@/api/activity'
 
 const router = useRouter()
+const route = useRoute()
 const formRef = ref()
 const uploadRef = ref()
 const loading = ref(false)
 
 const form = reactive({
-  periodId: null as number | null,
+  activityId: null as number | null,
   title: '',
   description: '',
   file: null as File | null
 })
 
 const rules = {
-  periodId: [{ required: true, message: '请选择考核周期', trigger: 'change' }],
+  activityId: [{ required: true, message: '请选择活动', trigger: 'change' }],
   title: [{ required: true, message: '请输入文档标题', trigger: 'blur' }],
   file: [{ required: true, message: '请选择文件', trigger: 'change' }]
 }
 
-const periods = ref<any[]>([])
+const activities = ref<any[]>([])
 const fileList = ref<any[]>([])
 
-const loadPeriods = async () => {
-  const res = await getPeriodList()
+const loadActivities = async () => {
+  const res = await getAvailableActivitiesForTeacher()
   if (res.code === 200) {
-    periods.value = res.data
+    activities.value = res.data
+    if (route.query.activityId) {
+      form.activityId = Number(route.query.activityId)
+    }
   }
 }
 
@@ -113,7 +117,7 @@ const handleSubmit = async () => {
   try {
     const formData = new FormData()
     formData.append('file', form.file)
-    formData.append('periodId', String(form.periodId))
+    formData.append('activityId', String(form.activityId))
     formData.append('title', form.title)
     formData.append('description', form.description)
 
@@ -129,8 +133,8 @@ const handleSubmit = async () => {
   }
 }
 
-onMounted(() => {
-  loadPeriods()
+onMounted(async () => {
+  await loadActivities()
 })
 </script>
 

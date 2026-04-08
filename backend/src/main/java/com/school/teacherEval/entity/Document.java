@@ -16,8 +16,8 @@ public class Document {
     @Column(name = "user_id", nullable = false)
     private Long userId;
     
-    @Column(name = "period_id", nullable = false)
-    private Long periodId;
+    @Column(name = "activity_id", nullable = false)
+    private Long activityId;
     
     @Column(nullable = false, length = 200)
     private String title;

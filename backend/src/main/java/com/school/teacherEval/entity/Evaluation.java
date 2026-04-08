@@ -7,23 +7,21 @@ import java.time.LocalDateTime;
 
 @Data
 @Entity
-@Table(name = "evaluations", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"teacher_id", "period_id"})
-})
+@Table(name = "evaluations")
 public class Evaluation {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @Column(name = "evaluator_id", nullable = false)
+    @Column(name = "activity_id", nullable = false)
+    private Long activityId;
+    
+    @Column(name = "evaluator_id")
     private Long evaluatorId;
     
     @Column(name = "teacher_id", nullable = false)
     private Long teacherId;
-    
-    @Column(name = "period_id", nullable = false)
-    private Long periodId;
     
     @Column(precision = 5, scale = 2)
     private BigDecimal score;
@@ -37,6 +35,24 @@ public class Evaluation {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Status status = Status.draft;
+    
+    @Column(name = "is_published", nullable = false)
+    private Boolean isPublished = false;
+    
+    @Column(name = "is_locked", nullable = false)
+    private Boolean isLocked = false;
+    
+    @Column(name = "final_score", precision = 5, scale = 2)
+    private BigDecimal finalScore;
+    
+    @Column(name = "exam_record_id")
+    private Long examRecordId;
+    
+    @Column(name = "auto_score", precision = 5, scale = 2)
+    private BigDecimal autoScore;
+    
+    @Column(name = "manual_adjust", precision = 5, scale = 2)
+    private BigDecimal manualAdjust = BigDecimal.ZERO;
     
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

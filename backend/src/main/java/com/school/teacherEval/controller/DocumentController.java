@@ -2,11 +2,8 @@ package com.school.teacherEval.controller;
 
 import com.school.teacherEval.dto.ApiResponse;
 import com.school.teacherEval.entity.Document;
-import com.school.teacherEval.entity.EvaluationPeriod;
 import com.school.teacherEval.entity.User;
 import com.school.teacherEval.service.DocumentService;
-import com.school.teacherEval.service.EnrollmentService;
-import com.school.teacherEval.service.EvaluationPeriodService;
 import com.school.teacherEval.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,7 +20,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -35,13 +31,11 @@ public class DocumentController {
     
     private final DocumentService documentService;
     private final UserService userService;
-    private final EvaluationPeriodService periodService;
-    private final EnrollmentService enrollmentService;
     
     @GetMapping
     @Operation(summary = "获取文档列表")
     public ApiResponse<Map<String, Object>> getDocuments(
-            @RequestParam(required = false) Long periodId,
+            @RequestParam(required = false) Long activityId,
             @RequestParam(required = false) Long userId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -50,22 +44,11 @@ public class DocumentController {
         String username = auth.getName();
         User currentUser = userService.getCurrentUser(username);
         
-        // 如果是教师，只能查看自己的文档
         if (currentUser.getRole() == User.Role.teacher) {
             userId = currentUser.getId();
         }
         
-        // 考核员只能看到已报名周期的文档
-        if (currentUser.getRole() == User.Role.evaluator && periodId == null) {
-            List<EvaluationPeriod> periods = periodService.getAllPeriods().stream()
-                    .filter(p -> p.getStatus() == EvaluationPeriod.Status.active)
-                    .collect(Collectors.toList());
-            if (!periods.isEmpty()) {
-                periodId = periods.get(0).getId();
-            }
-        }
-        
-        Page<Document> docPage = documentService.getDocuments(userId, periodId, page, size);
+        Page<Document> docPage = documentService.getDocuments(userId, activityId, page, size);
         
         Map<String, Object> data = new HashMap<>();
         data.put("records", docPage.getContent().stream().map(this::toVO).collect(Collectors.toList()));
@@ -81,7 +64,7 @@ public class DocumentController {
     @PreAuthorize("hasRole('teacher')")
     public ApiResponse<Document> uploadDocument(
             @RequestParam("file") MultipartFile file,
-            @RequestParam("periodId") Long periodId,
+            @RequestParam("activityId") Long activityId,
             @RequestParam("title") String title,
             @RequestParam(value = "description", required = false) String description) throws Exception {
         
@@ -90,7 +73,7 @@ public class DocumentController {
         User currentUser = userService.getCurrentUser(username);
         
         Document document = documentService.uploadDocument(
-                file, currentUser.getId(), periodId, title, description);
+                file, currentUser.getId(), activityId, title, description);
         
         return ApiResponse.success(document);
     }
@@ -155,7 +138,7 @@ public class DocumentController {
         Map<String, Object> map = new HashMap<>();
         map.put("id", doc.getId());
         map.put("userId", doc.getUserId());
-        map.put("periodId", doc.getPeriodId());
+        map.put("activityId", doc.getActivityId());
         map.put("title", doc.getTitle());
         map.put("fileName", doc.getFileName());
         map.put("fileSize", doc.getFileSize());
@@ -163,20 +146,11 @@ public class DocumentController {
         map.put("description", doc.getDescription());
         map.put("createdAt", doc.getCreatedAt());
         
-        // 填充教师姓名
         try {
             User teacher = userService.getUserById(doc.getUserId());
             map.put("realName", teacher.getRealName());
         } catch (Exception e) {
             map.put("realName", "");
-        }
-        
-        // 填充周期名称
-        try {
-            EvaluationPeriod period = periodService.getPeriodById(doc.getPeriodId());
-            map.put("periodName", period.getName());
-        } catch (Exception e) {
-            map.put("periodName", "");
         }
         
         return map;

@@ -14,5 +14,4 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 应用特定的样式可以放在这里 */
 </style>

@@ -13,9 +13,9 @@
           <el-input :value="teacherName" disabled />
         </el-form-item>
         
-        <el-form-item label="考核周期" prop="periodId">
-          <el-select v-model="form.periodId" placeholder="请选择考核周期">
-            <el-option v-for="p in periods" :key="p.id" :label="p.name" :value="p.id" />
+        <el-form-item label="考核活动" prop="activityId">
+          <el-select v-model="form.activityId" placeholder="请选择考核活动">
+            <el-option v-for="a in activities" :key="a.id" :label="`${a.name} (${a.level}级)`" :value="a.id" />
           </el-select>
         </el-form-item>
         
@@ -37,7 +37,7 @@
 
       <h3>历史评分</h3>
       <el-table :data="historyData" stripe>
-        <el-table-column prop="periodName" label="考核周期" />
+        <el-table-column prop="activityName" label="活动" />
         <el-table-column prop="score" label="评分" />
         <el-table-column prop="comment" label="评语" show-overflow-tooltip />
         <el-table-column prop="createdAt" label="评分时间" />
@@ -51,36 +51,40 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { submitEvaluation, getEvaluationList } from '@/api/evaluation'
-import { getPeriodList } from '@/api/period'
+import { getActivityList } from '@/api/activity'
 import { getTeachers } from '@/api/user'
 
 const route = useRoute()
 const router = useRouter()
 const teacherId = computed(() => Number(route.params.teacherId))
+const activityId = computed(() => route.query.activityId ? Number(route.query.activityId) : null)
 const teacherName = ref('')
 
 const formRef = ref()
 const loading = ref(false)
 
 const form = reactive({
-  periodId: null as number | null,
+  activityId: null as number | null,
   score: 0,
   comment: ''
 })
 
 const rules = {
-  periodId: [{ required: true, message: '请选择考核周期', trigger: 'change' }],
+  activityId: [{ required: true, message: '请选择考核活动', trigger: 'change' }],
   score: [{ required: true, message: '请输入评分', trigger: 'blur' }],
   comment: [{ max: 2000, message: '评语不能超过2000字', trigger: 'blur' }]
 }
 
-const periods = ref<any[]>([])
+const activities = ref<any[]>([])
 const historyData = ref<any[]>([])
 
-const loadPeriods = async () => {
-  const res = await getPeriodList()
+const loadActivities = async () => {
+  const res = await getActivityList()
   if (res.code === 200) {
-    periods.value = res.data
+    activities.value = res.data
+    if (activityId.value) {
+      form.activityId = activityId.value
+    }
   }
 }
 
@@ -96,7 +100,7 @@ const loadTeacherName = async () => {
 
 const loadHistory = async () => {
   const res = await getEvaluationList({
-    periodId: undefined,
+    activityId: undefined,
     teacherId: teacherId.value
   })
   if (res.code === 200) {
@@ -112,13 +116,13 @@ const handleSubmit = async () => {
   try {
     const res = await submitEvaluation({
       teacherId: teacherId.value,
-      periodId: form.periodId!,
+      activityId: form.activityId!,
       score: form.score,
       comment: form.comment
     })
     if (res.code === 200) {
       ElMessage.success('提交成功')
-      router.push('/evaluator/teachers')
+      router.push('/evaluator/activities')
     }
   } catch (e) {
     // error handled by interceptor
@@ -128,7 +132,7 @@ const handleSubmit = async () => {
 }
 
 onMounted(() => {
-  loadPeriods()
+  loadActivities()
   loadTeacherName()
   loadHistory()
 })

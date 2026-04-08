@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -108,6 +107,10 @@ public class UserService {
     
     public List<User> getTeachers() {
         return userRepository.findByRole(User.Role.teacher);
+    }
+    
+    public List<User> getEvaluators() {
+        return userRepository.findByRole(User.Role.evaluator);
     }
     
     public User getUserById(Long id) {

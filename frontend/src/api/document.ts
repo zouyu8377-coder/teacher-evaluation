@@ -4,6 +4,7 @@ export interface DocumentQuery {
   page?: number
   size?: number
   periodId?: number
+  activityId?: number
   userId?: number
 }
 

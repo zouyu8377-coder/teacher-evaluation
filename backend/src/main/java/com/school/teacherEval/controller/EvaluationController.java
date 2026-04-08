@@ -2,9 +2,7 @@ package com.school.teacherEval.controller;
 
 import com.school.teacherEval.dto.ApiResponse;
 import com.school.teacherEval.entity.Evaluation;
-import com.school.teacherEval.entity.EvaluationPeriod;
 import com.school.teacherEval.entity.User;
-import com.school.teacherEval.service.EvaluationPeriodService;
 import com.school.teacherEval.service.EvaluationService;
 import com.school.teacherEval.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,12 +28,11 @@ public class EvaluationController {
     
     private final EvaluationService evaluationService;
     private final UserService userService;
-    private final EvaluationPeriodService periodService;
     
     @GetMapping
     @Operation(summary = "获取评分列表")
     public ApiResponse<Map<String, Object>> getEvaluations(
-            @RequestParam(required = false) Long periodId,
+            @RequestParam(required = false) Long activityId,
             @RequestParam(required = false) Long teacherId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -43,12 +41,11 @@ public class EvaluationController {
         String username = auth.getName();
         User currentUser = userService.getCurrentUser(username);
         
-        // 教师只能查看自己的评分
         if (currentUser.getRole() == User.Role.teacher) {
             teacherId = currentUser.getId();
         }
         
-        Page<Evaluation> evalPage = evaluationService.getEvaluations(periodId, teacherId, page, size);
+        Page<Evaluation> evalPage = evaluationService.getEvaluations(activityId, teacherId, page, size);
         
         Map<String, Object> data = new HashMap<>();
         data.put("records", evalPage.getContent().stream().map(this::toVO).collect(Collectors.toList()));
@@ -62,26 +59,55 @@ public class EvaluationController {
     @GetMapping("/teacher/me")
     @Operation(summary = "教师查看自己的成绩")
     @PreAuthorize("hasRole('teacher')")
-    public ApiResponse<List<Map<String, Object>>> getMyEvaluations(
-            @RequestParam(required = false) Long periodId) {
+    public ApiResponse<List<Map<String, Object>>> getMyEvaluations() {
         
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String username = auth.getName();
         User currentUser = userService.getCurrentUser(username);
         
-        List<Evaluation> evaluations;
-        if (periodId != null) {
-            Evaluation eval = evaluationService.getTeacherPeriodEvaluation(currentUser.getId(), periodId);
-            evaluations = eval != null ? List.of(eval) : List.of();
-        } else {
-            evaluations = evaluationService.getTeacherEvaluations(currentUser.getId());
-        }
+        List<Evaluation> evaluations = evaluationService.getTeacherPublishedEvaluations(currentUser.getId());
         
         List<Map<String, Object>> result = evaluations.stream()
                 .map(this::toVO)
                 .collect(Collectors.toList());
         
         return ApiResponse.success(result);
+    }
+    
+    @GetMapping("/activity/{activityId}/teacher/{teacherId}")
+    @Operation(summary = "获取某教师的所有评分")
+    public ApiResponse<Map<String, Object>> getTeacherActivityEvaluations(
+            @PathVariable Long activityId, 
+            @PathVariable Long teacherId) {
+        
+        List<Evaluation> evaluations = evaluationService.getActivityTeacherEvaluations(activityId, teacherId);
+        
+        Map<String, Object> data = new HashMap<>();
+        data.put("evaluations", evaluations.stream().map(this::toVO).collect(Collectors.toList()));
+        data.put("count", evaluations.size());
+        
+        BigDecimal avgScore = evaluationService.calculateAverageScore(evaluations);
+        data.put("averageScore", avgScore);
+        
+        return ApiResponse.success(data);
+    }
+    
+    @GetMapping("/activity/{activityId}/summary")
+    @Operation(summary = "获取活动评分汇总")
+    public ApiResponse<Map<String, Object>> getActivitySummary(
+            @PathVariable Long activityId,
+            @RequestParam(required = false) Long teacherId) {
+        
+        EvaluationService.EvaluationSummary summary = evaluationService.getActivitySummary(activityId, teacherId);
+        
+        Map<String, Object> data = new HashMap<>();
+        data.put("totalEvaluations", summary.getTotalEvaluations());
+        data.put("averageScore", summary.getAverageScore());
+        data.put("evaluations", summary.getEvaluations() != null 
+            ? summary.getEvaluations().stream().map(this::toVO).collect(Collectors.toList())
+            : List.of());
+        
+        return ApiResponse.success(data);
     }
     
     @PostMapping
@@ -94,12 +120,12 @@ public class EvaluationController {
         User currentUser = userService.getCurrentUser(username);
         
         Long teacherId = Long.valueOf(request.get("teacherId").toString());
-        Long periodId = Long.valueOf(request.get("periodId").toString());
-        java.math.BigDecimal score = new java.math.BigDecimal(request.get("score").toString());
+        Long activityId = Long.valueOf(request.get("activityId").toString());
+        BigDecimal score = new BigDecimal(request.get("score").toString());
         String comment = request.get("comment") != null ? request.get("comment").toString() : null;
         
         Evaluation evaluation = evaluationService.createOrUpdateEvaluation(
-                currentUser.getId(), teacherId, periodId, score, comment);
+                currentUser.getId(), teacherId, activityId, score, comment);
         
         return ApiResponse.success(evaluation);
     }
@@ -111,15 +137,28 @@ public class EvaluationController {
         return ApiResponse.success(toVO(evaluation));
     }
     
+    @PostMapping("/publish")
+    @Operation(summary = "公布成绩")
+    @PreAuthorize("hasRole('evaluator') or hasRole('admin')")
+    public ApiResponse<Integer> publishScores(
+            @RequestParam Long activityId, 
+            @RequestParam(required = false) Long teacherId) {
+        int count = evaluationService.publishScores(activityId, teacherId);
+        return ApiResponse.success(count);
+    }
+    
     private Map<String, Object> toVO(Evaluation eval) {
         Map<String, Object> map = new HashMap<>();
         map.put("id", eval.getId());
+        map.put("activityId", eval.getActivityId());
         map.put("evaluatorId", eval.getEvaluatorId());
         map.put("teacherId", eval.getTeacherId());
-        map.put("periodId", eval.getPeriodId());
         map.put("score", eval.getScore());
+        map.put("finalScore", eval.getFinalScore());
         map.put("comment", eval.getComment());
         map.put("status", eval.getStatus().name());
+        map.put("isPublished", eval.getIsPublished());
+        map.put("isLocked", eval.getIsLocked());
         map.put("createdAt", eval.getCreatedAt());
         
         try {
@@ -134,13 +173,6 @@ public class EvaluationController {
             map.put("teacherName", teacher.getRealName());
         } catch (Exception e) {
             map.put("teacherName", "");
-        }
-        
-        try {
-            EvaluationPeriod period = periodService.getPeriodById(eval.getPeriodId());
-            map.put("periodName", period.getName());
-        } catch (Exception e) {
-            map.put("periodName", "");
         }
         
         return map;

@@ -6,9 +6,9 @@
       </template>
 
       <el-form inline>
-        <el-form-item label="考核周期">
-          <el-select v-model="query.periodId" placeholder="全部" clearable @change="loadData">
-            <el-option v-for="p in periods" :key="p.id" :label="p.name" :value="p.id" />
+        <el-form-item label="活动">
+          <el-select v-model="query.activityId" placeholder="全部" clearable @change="loadData">
+            <el-option v-for="p in activities" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -52,17 +52,17 @@
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getMaterialList, downloadMaterial } from '@/api/learningMaterial'
-import { getPeriodList } from '@/api/period'
+import { getActivityList } from '@/api/activity'
 
 const tableData = ref<any[]>([])
-const periods = ref<any[]>([])
+const activities = ref<any[]>([])
 const loading = ref(false)
 const total = ref(0)
 
 const query = reactive({
   page: 1,
   size: 10,
-  periodId: null as number | null
+  activityId: null as number | null
 })
 
 const formatSize = (bytes: number) => {
@@ -72,10 +72,10 @@ const formatSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(1) + 'MB'
 }
 
-const loadPeriods = async () => {
-  const res = await getPeriodList()
+const loadActivities = async () => {
+  const res = await getActivityList()
   if (res.code === 200) {
-    periods.value = res.data
+    activities.value = res.data
   }
 }
 
@@ -109,7 +109,7 @@ const handleDownload = async (row: any) => {
 }
 
 onMounted(() => {
-  loadPeriods()
+  loadActivities()
   loadData()
 })
 </script>

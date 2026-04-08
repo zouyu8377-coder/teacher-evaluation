@@ -9,9 +9,9 @@
       </template>
 
       <el-form inline>
-        <el-form-item label="考核周期">
-          <el-select v-model="query.periodId" placeholder="全部" clearable @change="loadData">
-            <el-option v-for="p in periods" :key="p.id" :label="p.name" :value="p.id" />
+        <el-form-item label="活动">
+          <el-select v-model="query.activityId" placeholder="全部" clearable @change="loadData">
+            <el-option v-for="p in activities" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -54,9 +54,9 @@
 
     <el-dialog v-model="dialogVisible" :title="editId ? '编辑资料' : '上传资料'" width="500px">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
-        <el-form-item label="考核周期" prop="periodId">
-          <el-select v-model="form.periodId" placeholder="请选择考核周期">
-            <el-option v-for="p in periods" :key="p.id" :label="p.name" :value="p.id" />
+        <el-form-item label="活动" prop="activityId">
+          <el-select v-model="form.activityId" placeholder="请选择活动">
+            <el-option v-for="p in activities" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="资料标题" prop="title">
@@ -93,7 +93,7 @@ import { reactive, ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { getMaterialList, uploadMaterial, updateMaterial, deleteMaterial, downloadMaterial } from '@/api/learningMaterial'
-import { getPeriodList } from '@/api/period'
+import { getActivityList } from '@/api/activity'
 
 const userInfo = computed(() => {
   try {
@@ -106,29 +106,29 @@ const userInfo = computed(() => {
 const isAdmin = computed(() => userInfo.value?.role === 'admin')
 
 const tableData = ref<any[]>([])
-const periods = ref<any[]>([])
+const activities = ref<any[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
+const editId = ref<number | null>(null)
 const formRef = ref()
 const uploadRef = ref()
-const editId = ref<number | null>(null)
 const fileList = ref<any[]>([])
 
 const query = reactive({
   page: 1,
   size: 10,
-  periodId: null as number | null
+  activityId: null as number | null
 })
 
 const form = reactive({
-  periodId: null as number | null,
+  activityId: null as number | null,
   title: '',
   description: '',
   file: null as File | null
 })
 
 const rules = {
-  periodId: [{ required: true, message: '请选择考核周期', trigger: 'change' }],
+  activityId: [{ required: true, message: '请选择活动', trigger: 'change' }],
   title: [{ required: true, message: '请输入资料标题', trigger: 'blur' }]
 }
 
@@ -139,10 +139,24 @@ const formatSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(1) + 'MB'
 }
 
-const loadPeriods = async () => {
-  const res = await getPeriodList()
+const loadActivities = async () => {
+  const res = await getActivityList()
   if (res.code === 200) {
-    periods.value = res.data
+    activities.value = res.data
+  }
+}
+
+const formatSize = (bytes: number) => {
+  if (!bytes) return '-'
+  if (bytes < 1024) return bytes + 'B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + 'MB'
+}
+
+const loadActivities = async () => {
+  const res = await getActivityList()
+  if (res.code === 200) {
+    activities.value = res.data
   }
 }
 
@@ -161,7 +175,7 @@ const loadData = async () => {
 
 const handleAdd = () => {
   editId.value = null
-  Object.assign(form, { periodId: null, title: '', description: '', file: null })
+  Object.assign(form, { activityId: null, title: '', description: '', file: null })
   fileList.value = []
   dialogVisible.value = true
 }
@@ -169,7 +183,7 @@ const handleAdd = () => {
 const handleEdit = (row: any) => {
   editId.value = row.id
   Object.assign(form, {
-    periodId: row.periodId,
+    activityId: row.activityId,
     title: row.title,
     description: row.description,
     file: null
@@ -216,7 +230,7 @@ const handleSubmit = async () => {
     } else {
       const formData = new FormData()
       formData.append('file', form.file!)
-      formData.append('periodId', String(form.periodId))
+      formData.append('activityId', String(form.activityId))
       formData.append('title', form.title)
       formData.append('description', form.description)
       
@@ -260,7 +274,7 @@ const handleDelete = async (row: any) => {
 const total = ref(0)
 
 onMounted(() => {
-  loadPeriods()
+  loadActivities()
   loadData()
 })
 </script>

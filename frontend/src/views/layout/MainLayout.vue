@@ -1,17 +1,13 @@
 <template>
-  <el-container class="main-layout">
-    <el-aside width="220px">
-      <AppSidebar />
-    </el-aside>
-    <el-container>
-      <el-header>
-        <AppHeader />
-      </el-header>
-      <el-main>
+  <div class="main-layout">
+    <AppSidebar />
+    <div class="main-content-wrapper">
+      <AppHeader />
+      <main class="main-content">
         <router-view />
-      </el-main>
-    </el-container>
-  </el-container>
+      </main>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -21,23 +17,41 @@ import AppSidebar from '@/components/AppSidebar.vue'
 
 <style scoped>
 .main-layout {
-  min-height: 100vh;
-}
-
-.el-aside {
-  background-color: #304156;
-}
-
-.el-header {
-  background-color: #fff;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
   display: flex;
-  align-items: center;
-  padding: 0 20px;
+  min-height: 100vh;
+  background: #f7f9fc;
 }
 
-.el-main {
-  background-color: #f0f2f5;
-  padding: 20px;
+.main-content-wrapper {
+  flex: 1;
+  margin-left: 260px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #f7f9fc;
+}
+
+.main-content {
+  flex: 1;
+  padding: 32px;
+  overflow-x: hidden;
+  background: #f7f9fc;
+}
+
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .main-content-wrapper {
+    margin-left: 0;
+  }
+  
+  .main-content {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .main-content {
+    padding: 16px;
+  }
 }
 </style>

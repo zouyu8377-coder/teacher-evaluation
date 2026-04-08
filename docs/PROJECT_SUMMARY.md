@@ -1064,9 +1064,96 @@ CREATE TABLE IF NOT EXISTS period_enrollments (
 - ✅ 管理员数据概览
 - ✅ 学习资料功能
 - ✅ **考核报名功能(新增)**
+- ✅ **活动级别功能(新增)** - C/B2/B1/A2/A1五级，需要按顺序通过
 
 ---
 
-**最后更新**：2026年4月3日 20:45
+## 实施进展记录 (2026年4月6日 - 活动级别功能开发)
 
-**文档版本**：1.7
+### 功能需求
+
+为考核活动增加级别分类，教师需要按顺序通过各级考核：
+- 级别顺序：C < B2 < B1 < A2 < A1
+- 只有通过当前级别才能报名下一级别（分数>=60）
+- 同一考核周期内可创建多个不同级别的活动
+
+### 数据库设计
+
+**新增表: activities**
+
+```sql
+CREATE TABLE activities (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    period_id BIGINT NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    level ENUM('C','B2','B1','A2','A1') NOT NULL,
+    description TEXT,
+    max_participants INT,
+    status ENUM('draft','active','closed'),
+    enrollment_start DATETIME,
+    enrollment_end DATETIME,
+    created_at DATETIME,
+    updated_at DATETIME
+);
+```
+
+**修改表结构：**
+- `period_enrollments`: 增加 `activity_id` 外键
+- `documents`: 增加 `activity_id` 外键
+- `evaluations`: 改用 `activity_id` 替代 `period_id` 作为唯一约束
+
+### 后端实现
+
+| 文件 | 说明 |
+|------|------|
+| `entity/Activity.java` | 活动实体类，包含Level枚举 |
+| `repository/ActivityRepository.java` | 活动数据访问层 |
+| `service/ActivityService.java` | 活动业务逻辑，含报名资格校验 |
+| `controller/ActivityController.java` | 活动API控制器 |
+| `service/EnrollmentService.java` | 扩展报名逻辑，校验前置级别 |
+| `service/DocumentService.java` | 更新文档上传，增加activityId参数 |
+| `service/EvaluationService.java` | 更新评分逻辑，使用activityId |
+| `config/DataInitializer.java` | 自动创建5个级别的活动 |
+
+**API接口：**
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/activities | 获取所有活动 |
+| GET | /api/activities/period/{periodId} | 获取周期的活动列表 |
+| GET | /api/activities/{id}/can-enroll | 检查是否可报名 |
+| POST | /api/activities | 创建活动(管理员) |
+| PUT | /api/activities/{id} | 更新活动 |
+| DELETE | /api/activities/{id} | 删除活动 |
+| POST | /api/periods/activities/{activityId}/enroll | 报名活动 |
+| GET | /api/periods/{periodId}/available-activities | 获取可报名活动 |
+
+### 前端实现
+
+| 文件 | 说明 |
+|------|------|
+| `api/activity.ts` | 活动API封装 |
+| `api/period.ts` | 更新报名相关API |
+| `views/teacher/Enrollment.vue` | 教师报名页面，支持选择活动级别 |
+| `views/teacher/DocumentUpload.vue` | 文档上传，增加活动选择 |
+
+### 级别晋升规则
+
+```
+C级 → 无前置条件，直接报名
+B2级 → 必须先通过C级考核（分数>=60）
+B1级 → 必须先通过B2级考核
+A2级 → 必须先通过B1级考核
+A1级 → 必须先通过A2级考核
+```
+
+### 编译验证
+
+- 后端编译：`mvn compile` → BUILD SUCCESS
+- 前端构建：`npm run build` → BUILD SUCCESS
+
+---
+
+**最后更新**：2026年4月7日 22:40
+
+**文档版本**：1.18

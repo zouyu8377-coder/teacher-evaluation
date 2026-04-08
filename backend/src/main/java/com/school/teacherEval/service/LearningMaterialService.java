@@ -27,11 +27,11 @@ public class LearningMaterialService {
     private final MinioConfig minioConfig;
     private final EnrollmentService enrollmentService;
     
-    public Page<LearningMaterial> getMaterials(Long periodId, int page, int size) {
+    public Page<LearningMaterial> getMaterials(Long activityId, int page, int size) {
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         
-        if (periodId != null) {
-            return materialRepository.findByPeriodId(periodId, pageable);
+        if (activityId != null) {
+            return materialRepository.findByActivityId(activityId, pageable);
         }
         
         return materialRepository.findAllActive(pageable);
@@ -46,7 +46,7 @@ public class LearningMaterialService {
     }
     
     @Transactional
-    public LearningMaterial uploadMaterial(MultipartFile file, Long periodId, 
+    public LearningMaterial uploadMaterial(MultipartFile file, Long activityId, 
                                            String title, String description, Long createdBy) throws Exception {
         String bucketName = minioConfig.getBucketName();
         MinioClient minioClient = minioConfig.minioClient();
@@ -70,7 +70,7 @@ public class LearningMaterialService {
                 .build());
         
         LearningMaterial material = new LearningMaterial();
-        material.setPeriodId(periodId);
+        material.setActivityId(activityId);
         material.setTitle(title);
         material.setFilePath(filePath);
         material.setFileName(originalFilename);
@@ -125,8 +125,11 @@ public class LearningMaterialService {
         LearningMaterial material = getMaterialById(id);
         
         if (!role.equals("admin") && !role.equals("evaluator")) {
-            if (!enrollmentService.isEnrolled(material.getPeriodId(), userId)) {
-                throw new RuntimeException("您尚未报名该考核周期，无法下载学习资料");
+            if (material.getActivityId() != null) {
+                boolean isEnrolled = enrollmentService.isEnrolledByActivity(material.getActivityId(), userId);
+                if (!isEnrolled) {
+                    throw new RuntimeException("您尚未报名该活动，无法下载学习资料");
+                }
             }
         }
         

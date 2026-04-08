@@ -60,6 +60,23 @@ public class UserController {
         return ApiResponse.success(result);
     }
     
+    @GetMapping("/evaluators")
+    @Operation(summary = "评分人列表")
+    @PreAuthorize("hasRole('admin')")
+    public ApiResponse<List<Map<String, Object>>> getEvaluators() {
+        List<User> evaluators = userService.getEvaluators();
+        List<Map<String, Object>> result = evaluators.stream()
+                .map(e -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", e.getId());
+                    map.put("realName", e.getRealName());
+                    map.put("department", e.getDepartment());
+                    return map;
+                })
+                .collect(Collectors.toList());
+        return ApiResponse.success(result);
+    }
+    
     @PostMapping
     @Operation(summary = "创建用户")
     @PreAuthorize("hasRole('admin')")

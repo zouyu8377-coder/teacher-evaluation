@@ -14,11 +14,11 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 AND d.userId = :userId ORDER BY d.createdAt DESC")
     Page<Document> findByUserId(@Param("userId") Long userId, Pageable pageable);
     
-    @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 AND d.periodId = :periodId ORDER BY d.createdAt DESC")
-    Page<Document> findByPeriodId(@Param("periodId") Long periodId, Pageable pageable);
+    @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 AND d.activityId = :activityId ORDER BY d.createdAt DESC")
+    Page<Document> findByActivityId(@Param("activityId") Long activityId, Pageable pageable);
     
-    @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 AND d.userId = :userId AND d.periodId = :periodId ORDER BY d.createdAt DESC")
-    Page<Document> findByUserIdAndPeriodId(@Param("userId") Long userId, @Param("periodId") Long periodId, Pageable pageable);
+    @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 AND d.userId = :userId AND d.activityId = :activityId ORDER BY d.createdAt DESC")
+    Page<Document> findByUserIdAndActivityId(@Param("userId") Long userId, @Param("activityId") Long activityId, Pageable pageable);
     
     @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 ORDER BY d.createdAt DESC")
     Page<Document> findAllActive(Pageable pageable);
