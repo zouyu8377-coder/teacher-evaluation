@@ -10,7 +10,7 @@
 
       <el-form inline>
         <el-form-item label="选择考核活动">
-          <el-select v-model="selectedActivity" placeholder="请选择活动" @change="onActivityChange" clearable>
+          <el-select v-model="selectedActivity" placeholder="请选择活动" @change="onActivityChange" clearable filterable style="width: 280px;">
             <el-option v-for="a in activities" :key="a.id" :label="`${a.name} (${a.level}级)`" :value="a.id" />
           </el-select>
         </el-form-item>
@@ -31,10 +31,12 @@
             {{ row.score !== null ? row.score : '未评分' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200">
+        <el-table-column label="操作" width="180">
           <template #default="{ row }">
-            <el-button type="primary" link @click="viewDocuments(row)">查看文档</el-button>
-            <el-button type="success" link @click="goEvaluate(row)">打分</el-button>
+            <div class="action-buttons">
+              <el-button type="primary" link @click="viewDocuments(row)">查看文档</el-button>
+              <el-button type="success" link @click="goEvaluate(row)">打分</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -122,5 +124,10 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 </style>

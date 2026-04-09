@@ -21,18 +21,20 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="250">
+        <el-table-column label="操作" width="260">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-            <el-button 
-              :type="row.status === 'active' ? 'warning' : 'success'" 
-              link 
-              @click="toggleStatus(row)"
-            >
-              {{ row.status === 'active' ? '禁用' : '启用' }}
-            </el-button>
-            <el-button type="info" link @click="showEnrollments(row)">报名({{ row.enrolledCount || 0 }})</el-button>
-            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+            <div class="action-buttons">
+              <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+              <el-button 
+                :type="row.status === 'active' ? 'warning' : 'success'" 
+                link 
+                @click="toggleStatus(row)"
+              >
+                {{ row.status === 'active' ? '禁用' : '启用' }}
+              </el-button>
+              <el-button type="info" link @click="showEnrollments(row)" :title="`已报名 ${row.enrolledCount || 0} 人`">报名</el-button>
+              <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -203,5 +205,14 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.action-buttons .el-button {
+  padding: 4px 8px;
+  min-width: auto;
 }
 </style>

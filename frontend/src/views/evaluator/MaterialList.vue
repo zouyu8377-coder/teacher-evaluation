@@ -7,7 +7,7 @@
 
       <el-form inline>
         <el-form-item label="活动">
-          <el-select v-model="query.activityId" placeholder="全部" clearable @change="loadData">
+          <el-select v-model="query.activityId" placeholder="全部" clearable filterable @change="loadData" style="width: 200px;">
             <el-option v-for="p in activities" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>

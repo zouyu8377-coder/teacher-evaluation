@@ -1,5 +1,6 @@
 package com.school.teacherEval.controller;
 
+import com.school.teacherEval.dto.ApiResponse;
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.service.ActivityService;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +20,7 @@ public class StatsController {
     
     private final ActivityService activityService;
     
-    @GetMapping("/level-passed")
+    @GetMapping(value = "/level-passed", produces = "application/json;charset=UTF-8")
     public ResponseEntity<Map<String, Long>> getLevelPassedCount() {
         Map<String, Long> result = new HashMap<>();
         for (Activity.Level level : Activity.Level.values()) {
@@ -28,9 +29,9 @@ public class StatsController {
         return ResponseEntity.ok(result);
     }
     
-    @GetMapping("/active-activities")
-    public ResponseEntity<List<Activity>> getActiveActivities() {
+    @GetMapping(value = "/active-activities", produces = "application/json;charset=UTF-8")
+    public ApiResponse<List<Activity>> getActiveActivities() {
         List<Activity> activities = activityService.getAllActiveOrderByLevel();
-        return ResponseEntity.ok(activities);
+        return ApiResponse.success(activities);
     }
 }

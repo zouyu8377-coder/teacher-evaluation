@@ -10,7 +10,7 @@
 
       <el-form inline>
         <el-form-item label="角色">
-          <el-select v-model="query.role" placeholder="请选择" clearable @change="loadData">
+          <el-select v-model="query.role" placeholder="请选择" clearable filterable @change="loadData" style="width: 120px;">
             <el-option label="教师" value="teacher" />
             <el-option label="考核员" value="evaluator" />
             <el-option label="管理员" value="admin" />

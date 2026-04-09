@@ -7,7 +7,7 @@
       
       <el-form inline>
         <el-form-item label="活动">
-          <el-select v-model="query.activityId" placeholder="请选择" clearable @change="loadData">
+          <el-select v-model="query.activityId" placeholder="请选择" clearable filterable @change="loadData" style="width: 250px;">
             <el-option v-for="a in activities" :key="a.id" :label="`${a.level}级 - ${a.name}`" :value="a.id" />
           </el-select>
         </el-form-item>

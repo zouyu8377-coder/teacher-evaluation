@@ -10,7 +10,7 @@
       
       <el-form inline>
         <el-form-item label="活动">
-          <el-select v-model="query.activityId" placeholder="请选择" clearable @change="loadData">
+          <el-select v-model="query.activityId" placeholder="请选择" clearable filterable @change="loadData" style="width: 200px;">
             <el-option v-for="p in activities" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
@@ -30,12 +30,14 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="250">
+        <el-table-column label="操作" width="280">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-            <el-button type="success" link @click="openQuestionSelector(row)">选题</el-button>
-            <el-button type="warning" link @click="openGenerator(row)">随机组卷</el-button>
-            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+            <div class="action-buttons">
+              <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+              <el-button type="success" link @click="openQuestionSelector(row)">选题</el-button>
+              <el-button type="warning" link @click="openGenerator(row)">组卷</el-button>
+              <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -83,7 +85,7 @@
     <el-dialog v-model="showQuestionSelector" title="选择题目" width="900px">
       <el-form inline>
         <el-form-item label="题型">
-          <el-select v-model="questionQuery.type" placeholder="全部" clearable @change="loadQuestions">
+          <el-select v-model="questionQuery.type" placeholder="全部" clearable filterable @change="loadQuestions" style="width: 120px;">
             <el-option label="单选题" value="single" />
             <el-option label="多选题" value="multiple" />
           </el-select>
@@ -362,5 +364,14 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.action-buttons .el-button {
+  padding: 4px 8px;
+  min-width: auto;
 }
 </style>

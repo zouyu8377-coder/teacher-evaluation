@@ -14,18 +14,18 @@
       
       <el-form inline>
         <el-form-item label="活动">
-          <el-select v-model="query.activityId" placeholder="请选择" clearable @change="loadData">
+          <el-select v-model="query.activityId" placeholder="请选择" clearable filterable @change="loadData" style="width: 200px;">
             <el-option v-for="p in activities" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="题型">
-          <el-select v-model="query.type" placeholder="全部" clearable @change="loadData">
+          <el-select v-model="query.type" placeholder="全部" clearable filterable @change="loadData" style="width: 120px;">
             <el-option label="单选题" value="single" />
             <el-option label="多选题" value="multiple" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="query.status" placeholder="全部" clearable @change="loadData">
+          <el-select v-model="query.status" placeholder="全部" clearable filterable @change="loadData" style="width: 100px;">
             <el-option label="启用" :value="true" />
             <el-option label="禁用" :value="false" />
           </el-select>

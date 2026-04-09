@@ -52,14 +52,16 @@
             {{ formatDateTime(row.enrollmentStart) }} ~ {{ formatDateTime(row.enrollmentEnd) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200">
+        <el-table-column label="操作" width="280">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-            <el-button type="info" link @click="handleReviewerConfig(row)">评分人配置</el-button>
-            <el-button :type="row.status === 'active' ? 'warning' : 'success'" link @click="toggleStatus(row)">
-              {{ row.status === 'active' ? '关闭' : '启用' }}
-            </el-button>
-            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+            <div class="action-buttons">
+              <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+              <el-button type="info" link @click="handleReviewerConfig(row)">评分人</el-button>
+              <el-button :type="row.status === 'active' ? 'warning' : 'success'" link @click="toggleStatus(row)">
+                {{ row.status === 'active' ? '关闭' : '启用' }}
+              </el-button>
+              <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -339,5 +341,14 @@ onMounted(() => {
 .text-danger {
   color: #f56c6c;
   font-weight: bold;
+}
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.action-buttons .el-button {
+  padding: 4px 8px;
+  min-width: auto;
 }
 </style>

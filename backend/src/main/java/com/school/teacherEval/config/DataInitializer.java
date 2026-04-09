@@ -202,6 +202,10 @@ public class DataInitializer {
                     cActivity.setExamPaperId(paper.getId());
                     cActivity.setHasExam(true);
                     cActivity.setExamDurationMinutes(60);
+                    cActivity.setStatus(Activity.Status.active); // 确保设置为进行中状态
+                    cActivity.setStartDate(LocalDate.of(2024, 9, 1)); // 设置开始日期
+                    cActivity.setEndDate(LocalDate.of(2025, 1, 31)); // 设置结束日期
+                    cActivity.setReviewerIds("[1]"); // 设置评审员ID
                     activityRepository.save(cActivity);
                     
                     List<ExamQuestion> questions = questionRepository.findAll();

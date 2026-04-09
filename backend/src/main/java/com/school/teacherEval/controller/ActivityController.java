@@ -2,8 +2,10 @@ package com.school.teacherEval.controller;
 
 import com.school.teacherEval.dto.ApiResponse;
 import com.school.teacherEval.entity.Activity;
+import com.school.teacherEval.entity.PeriodEnrollment;
 import com.school.teacherEval.entity.User;
 import com.school.teacherEval.service.ActivityService;
+import com.school.teacherEval.service.EnrollmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -18,62 +20,85 @@ import java.util.Map;
 public class ActivityController {
     
     private final ActivityService activityService;
+    private final EnrollmentService enrollmentService;
     
-    @GetMapping
-    public ApiResponse<List<Activity>> getAll() {
+    @GetMapping(produces = "application/json;charset=UTF-8")
+    public ApiResponse<List<Activity>> getAll(@RequestParam(required = false) Boolean activeOnly) {
+        if (Boolean.TRUE.equals(activeOnly)) {
+            return ApiResponse.success(activityService.getAllActiveOrderByLevel());
+        }
         return ApiResponse.success(activityService.getAll());
     }
     
-    @GetMapping("/level/{level}")
+    @GetMapping(value = "/level/{level}", produces = "application/json;charset=UTF-8")
     public ApiResponse<List<Activity>> getByLevel(@PathVariable Activity.Level level) {
         return ApiResponse.success(activityService.getByLevel(level));
     }
     
-    @GetMapping("/{id}")
+    @GetMapping(value = "/{id}", produces = "application/json;charset=UTF-8")
     public ApiResponse<Activity> getById(@PathVariable Long id) {
         return ApiResponse.success(activityService.getById(id));
     }
     
-    @GetMapping("/available")
+    @GetMapping(value = "/available", produces = "application/json;charset=UTF-8")
     public ApiResponse<List<Activity>> getAvailable() {
         return ApiResponse.success(activityService.getAvailableActivities());
     }
     
-    @GetMapping("/active")
+    @GetMapping(value = "/active", produces = "application/json;charset=UTF-8")
     public ApiResponse<List<Activity>> getActive() {
         return ApiResponse.success(activityService.getAllActiveOrderByLevel());
     }
     
-    @GetMapping("/teacher/available")
+    @GetMapping(value = "/teacher/available", produces = "application/json;charset=UTF-8")
     public ApiResponse<List<Activity>> getAvailableForTeacher(@AuthenticationPrincipal User user) {
         return ApiResponse.success(activityService.getAvailableForTeacher(user.getId()));
     }
     
-    @GetMapping("/reviewer/{evaluatorId}")
+    @GetMapping(value = "/my-enrollments", produces = "application/json;charset=UTF-8")
+    public ApiResponse<List<Map<String, Object>>> getMyEnrollments(@AuthenticationPrincipal User user) {
+        List<PeriodEnrollment> enrollments = enrollmentService.getTeacherEnrollments(user.getId());
+        List<Map<String, Object>> result = enrollments.stream()
+            .filter(e -> e.getStatus() == PeriodEnrollment.Status.enrolled)
+            .map(e -> {
+                Map<String, Object> map = new HashMap<>();
+                map.put("activityId", e.getActivityId());
+                map.put("enrolledAt", e.getEnrolledAt());
+                Activity activity = activityService.getById(e.getActivityId());
+                map.put("activityName", activity.getName());
+                map.put("level", activity.getLevel());
+                map.put("hasExam", activity.getHasExam());
+                return map;
+            })
+            .toList();
+        return ApiResponse.success(result);
+    }
+    
+    @GetMapping(value = "/reviewer/{evaluatorId}", produces = "application/json;charset=UTF-8")
     public ApiResponse<List<Activity>> getByReviewer(@PathVariable Long evaluatorId) {
         return ApiResponse.success(activityService.getByReviewerId(evaluatorId));
     }
     
-    @PostMapping
+    @PostMapping(produces = "application/json;charset=UTF-8")
     @PreAuthorize("hasRole('admin')")
     public ApiResponse<Activity> create(@RequestBody Activity activity) {
         return ApiResponse.success(activityService.create(activity));
     }
     
-    @PutMapping("/{id}")
+    @PutMapping(value = "/{id}", produces = "application/json;charset=UTF-8")
     @PreAuthorize("hasRole('admin')")
     public ApiResponse<Activity> update(@PathVariable Long id, @RequestBody Activity activity) {
         return ApiResponse.success(activityService.update(id, activity));
     }
     
-    @DeleteMapping("/{id}")
+    @DeleteMapping(value = "/{id}", produces = "application/json;charset=UTF-8")
     @PreAuthorize("hasRole('admin')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         activityService.delete(id);
         return ApiResponse.success(null);
     }
     
-    @PutMapping("/{id}/reviewer-config")
+    @PutMapping(value = "/{id}/reviewer-config", produces = "application/json;charset=UTF-8")
     @PreAuthorize("hasRole('admin')")
     public ApiResponse<Activity> updateReviewerConfig(
             @PathVariable Long id,
@@ -82,12 +107,12 @@ public class ActivityController {
         return ApiResponse.success(activityService.updateReviewerConfig(id, reviewerCount, reviewerIds));
     }
     
-    @GetMapping("/{id}/can-enroll")
+    @GetMapping(value = "/{id}/can-enroll", produces = "application/json;charset=UTF-8")
     public ApiResponse<Boolean> canEnroll(@PathVariable Long id, @AuthenticationPrincipal User user) {
         return ApiResponse.success(activityService.canEnroll(id, user.getId()));
     }
     
-    @GetMapping("/{id}/enrollment-info")
+    @GetMapping(value = "/{id}/enrollment-info", produces = "application/json;charset=UTF-8")
     public ApiResponse<Map<String, Object>> getEnrollmentInfo(@PathVariable Long id) {
         Activity activity = activityService.getById(id);
         long enrolledCount = activityService.getEnrolledCount(id);
@@ -110,5 +135,15 @@ public class ActivityController {
         info.put("reviewerCount", activity.getReviewerCount());
         
         return ApiResponse.success(info);
+    }
+    
+    @PostMapping(value = "/{id}/enroll", produces = "application/json;charset=UTF-8")
+    public ApiResponse<Void> enroll(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        try {
+            enrollmentService.enroll(id, user.getId());
+            return ApiResponse.success("报名成功", null);
+        } catch (RuntimeException e) {
+            return ApiResponse.error(e.getMessage());
+        }
     }
 }

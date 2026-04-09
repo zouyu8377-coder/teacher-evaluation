@@ -19,8 +19,8 @@ export interface Activity {
   createdAt: string
 }
 
-export const getActivityList = () => {
-  return api.get('/activities')
+export const getActivityList = (activeOnly: boolean = false) => {
+  return api.get('/activities', { params: { activeOnly } })
 }
 
 export const getActivitiesByPeriod = (periodId: number) => {
@@ -80,5 +80,5 @@ export const enrollActivity = (activityId: number) => {
 }
 
 export const getMyEnrollments = () => {
-  return api.get('/my-enrollments')
+  return api.get('/activities/my-enrollments')
 }

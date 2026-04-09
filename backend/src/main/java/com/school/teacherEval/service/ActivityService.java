@@ -53,20 +53,26 @@ public class ActivityService {
             validateCapacityUpdate(id, updated.getMaxParticipants());
         }
         
-        activity.setName(updated.getName());
-        activity.setLevel(updated.getLevel());
-        activity.setDescription(updated.getDescription());
-        activity.setMaxParticipants(updated.getMaxParticipants());
-        activity.setStatus(updated.getStatus());
-        activity.setEnrollmentStart(updated.getEnrollmentStart());
-        activity.setEnrollmentEnd(updated.getEnrollmentEnd());
-        activity.setStartDate(updated.getStartDate());
-        activity.setEndDate(updated.getEndDate());
-        activity.setReviewerCount(updated.getReviewerCount());
-        activity.setReviewerIds(updated.getReviewerIds());
-        activity.setExamPaperId(updated.getExamPaperId());
-        activity.setHasExam(updated.getHasExam());
-        activity.setExamDurationMinutes(updated.getExamDurationMinutes());
+        if (updated.getName() != null) activity.setName(updated.getName());
+        if (updated.getLevel() != null) activity.setLevel(updated.getLevel());
+        if (updated.getDescription() != null) activity.setDescription(updated.getDescription());
+        if (updated.getMaxParticipants() != null) activity.setMaxParticipants(updated.getMaxParticipants());
+        if (updated.getStatus() != null) {
+            activity.setStatus(updated.getStatus());
+        }
+        if (updated.getEnrollmentStart() != null) activity.setEnrollmentStart(updated.getEnrollmentStart());
+        if (updated.getEnrollmentEnd() != null) activity.setEnrollmentEnd(updated.getEnrollmentEnd());
+        if (updated.getStartDate() != null) activity.setStartDate(updated.getStartDate());
+        if (updated.getEndDate() != null) activity.setEndDate(updated.getEndDate());
+        if (updated.getReviewerCount() != null) {
+            activity.setReviewerCount(updated.getReviewerCount());
+        } else if (activity.getReviewerCount() == null) {
+            activity.setReviewerCount(2);
+        }
+        if (updated.getReviewerIds() != null) activity.setReviewerIds(updated.getReviewerIds());
+        if (updated.getExamPaperId() != null) activity.setExamPaperId(updated.getExamPaperId());
+        if (updated.getHasExam() != null) activity.setHasExam(updated.getHasExam());
+        if (updated.getExamDurationMinutes() != null) activity.setExamDurationMinutes(updated.getExamDurationMinutes());
         return activityRepository.save(activity);
     }
     

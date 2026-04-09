@@ -4,7 +4,12 @@ import router from '@/router'
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 30000
+  timeout: 30000,
+  responseType: 'json',
+  headers: {
+    'Accept': 'application/json;charset=UTF-8',
+    'Content-Type': 'application/json;charset=UTF-8'
+  }
 })
 
 api.interceptors.request.use(
@@ -13,13 +18,18 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    config.headers['Accept'] = 'application/json;charset=UTF-8'
+    config.headers['Content-Type'] = 'application/json;charset=UTF-8'
     return config
   },
   error => Promise.reject(error)
 )
 
 api.interceptors.response.use(
-  response => response.data,
+  response => {
+    // 确保响应数据是UTF-8编码的
+    return response.data
+  },
   error => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
