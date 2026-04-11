@@ -2,8 +2,8 @@
 
 ## 项目基本信息
 - **项目名称**: 教师评价考核平台
-- **当前日期**: 2026年4月9日
-- **文档版本**: 1.1
+- **当前日期**: 2026年4月11日
+- **文档版本**: 1.2
 - **执行人**: OpenCode AI助手
 
 ## 当前系统状态
@@ -95,6 +95,49 @@
 ### 🔄 待开发工作
 - 系统集成测试 - **优先级：中**
 - 性能优化与安全加固 - **优先级：低**
+
+## 问题修复记录 (2026-04-11)
+
+### 问题1: 评分人数重置问题
+**问题描述**: 管理员在编辑考核活动时，即使不修改评分人数，启动项目后评分人数也会被重置为2
+
+**排查过程**:
+1. 分析 `ActivityService.update` 方法 - 发现当提交 reviewerCount=2 时会覆盖已有值
+2. 前端使用 `row.reviewerCount || 2`，当值为0时会被替换为2
+
+**修复方案**:
+1. 后端 `ActivityService.java` - 只有当新值不是默认值2，或原值为null时才更新
+2. 前端 `ActivityManage.vue` - 修正 reviewerCount 取值逻辑，避免0被错误替换
+
+**修复文件**:
+- `backend/src/main/java/com/school/teacherEval/service/ActivityService.java` - update方法添加判断逻辑
+- `frontend/src/views/admin/ActivityManage.vue` - handleEdit和handleReviewerConfig函数
+
+**验证结果**:
+- 活动reviewer_count=5时，提交默认值2不会覆盖
+- 仅更新其他字段时，reviewerCount保持不变
+
+### 问题2: 教师报名列表显示已报名活动
+**问题描述**: 教师端的"报名新活动"列表中显示了已报名过的活动
+
+**排查过程**:
+1. 检查前端API调用 - 发现调用的是 `/activities/available` 而不是 `/activities/teacher/available`
+2. 检查导入语句 - 发现缺少 `getAvailableActivitiesForTeacher` 的导入
+3. 检查后端逻辑 - `getAvailableForTeacher` 方法未过滤已报名活动
+
+**修复方案**:
+1. 前端添加 `getAvailableActivitiesForTeacher` 到 import 语句
+2. 后端 `getAvailableForTeacher` 方法添加过滤已报名活动的逻辑
+
+**修复文件**:
+- `frontend/src/views/teacher/Enrollment.vue` - 添加导入并使用正确的API
+- `backend/src/main/java/com/school/teacherEval/service/ActivityService.java` - 添加过滤逻辑
+
+**验证结果**:
+- teacher1已报名活动3，剩余活动5显示在可报名列表
+- 已报名活动不再出现
+
+---
 
 ## 问题修复记录 (2026-04-09)
 
