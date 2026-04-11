@@ -252,7 +252,7 @@ const handleEdit = (row: any) => {
     startDate: row.startDate,
     endDate: row.endDate,
     maxParticipants: row.maxParticipants || 0,
-    reviewerCount: row.reviewerCount || 2,
+    reviewerCount: row.reviewerCount !== undefined && row.reviewerCount !== null ? row.reviewerCount : 2,
     enrollmentStart: row.enrollmentStart,
     enrollmentEnd: row.enrollmentEnd,
     description: row.description
@@ -262,7 +262,7 @@ const handleEdit = (row: any) => {
 
 const handleReviewerConfig = (row: any) => {
   currentActivityId.value = row.id
-  reviewerConfig.reviewerCount = row.reviewerCount || 2
+  reviewerConfig.reviewerCount = row.reviewerCount !== undefined && row.reviewerCount !== null ? row.reviewerCount : 2
   reviewerConfig.selectedReviewers = row.reviewerIds ? JSON.parse(row.reviewerIds).map((id: number) => id) : []
   reviewerDialogVisible.value = true
 }

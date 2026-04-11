@@ -88,7 +88,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getMyEnrollments, enrollActivity, getAvailableActivitiesList, canEnrollActivity, getEnrollmentInfo } from '@/api/activity'
+import { getMyEnrollments, enrollActivity, getAvailableActivitiesList, getAvailableActivitiesForTeacher, canEnrollActivity, getEnrollmentInfo } from '@/api/activity'
 
 const router = useRouter()
 const activeTab = ref('enrolled')
@@ -115,7 +115,7 @@ const getLevelType = (level: string) => {
 const loadAvailableActivities = async () => {
   loading.value = true
   try {
-    const res = await getAvailableActivitiesList()
+    const res = await getAvailableActivitiesForTeacher()
     if (res.code === 200) {
       const activities = res.data || []
       for (const activity of activities) {

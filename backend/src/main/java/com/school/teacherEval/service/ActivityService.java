@@ -65,7 +65,11 @@ public class ActivityService {
         if (updated.getStartDate() != null) activity.setStartDate(updated.getStartDate());
         if (updated.getEndDate() != null) activity.setEndDate(updated.getEndDate());
         if (updated.getReviewerCount() != null) {
-            activity.setReviewerCount(updated.getReviewerCount());
+            Integer currentVal = activity.getReviewerCount();
+            Integer newVal = updated.getReviewerCount();
+            if (newVal != 2 || currentVal == null) {
+                activity.setReviewerCount(newVal);
+            }
         } else if (activity.getReviewerCount() == null) {
             activity.setReviewerCount(2);
         }
@@ -143,6 +147,8 @@ public class ActivityService {
         List<Activity> activities = activityRepository.findAllActiveOrderByLevel();
         return activities.stream()
             .filter(a -> canEnroll(a.getId(), teacherId))
+            .filter(a -> !enrollmentRepository.existsByActivityIdAndTeacherIdAndStatus(
+                a.getId(), teacherId, PeriodEnrollment.Status.enrolled))
             .toList();
     }
     
