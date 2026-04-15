@@ -15,7 +15,7 @@ const routes: RouteRecordRaw[] = [
       const role = userStore.user?.role
       if (role === 'admin') return '/admin/dashboard'
       if (role === 'evaluator') return '/evaluator/activities'
-      if (role === 'teacher') return '/teacher/enrollment'
+      if (role === 'teacher') return '/teacher/dashboard'
       return '/login'
     }
   },
@@ -24,6 +24,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/layout/MainLayout.vue'),
     meta: { role: 'teacher' },
     children: [
+      {
+        path: 'dashboard',
+        name: 'TeacherDashboard',
+        component: () => import('@/views/teacher/Dashboard.vue')
+      },
       {
         path: 'documents',
         name: 'TeacherDocuments',
@@ -43,6 +48,11 @@ const routes: RouteRecordRaw[] = [
         path: 'enrollment',
         name: 'TeacherEnrollment',
         component: () => import('@/views/teacher/Enrollment.vue')
+      },
+      {
+        path: 'activities/:id',
+        name: 'TeacherActivityDetail',
+        component: () => import('@/views/teacher/ActivityDetail.vue')
       },
       {
         path: 'materials',
@@ -67,8 +77,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/evaluator/ActivityManage.vue')
       },
       {
+        path: 'activities/:id',
+        name: 'EvaluatorActivityDetail',
+        component: () => import('@/views/admin/ActivityDetail.vue')
+      },
+      {
         path: 'exams',
         name: 'EvaluatorExams',
+        component: () => import('@/views/evaluator/ExamRecords.vue')
+      },
+      {
+        path: 'exam-records/:teacherId',
+        name: 'EvaluatorExamRecords',
         component: () => import('@/views/evaluator/ExamRecords.vue')
       },
       {
@@ -104,6 +124,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/ActivityManage.vue')
       },
       {
+        path: 'activities/:id',
+        name: 'AdminActivityDetail',
+        component: () => import('@/views/admin/ActivityDetail.vue')
+      },
+      {
         path: 'questions',
         name: 'AdminQuestions',
         component: () => import('@/views/admin/QuestionManage.vue')
@@ -112,6 +137,11 @@ const routes: RouteRecordRaw[] = [
         path: 'papers',
         name: 'AdminPapers',
         component: () => import('@/views/admin/PaperManage.vue')
+      },
+      {
+        path: 'papers/:id/questions',
+        name: 'AdminPaperQuestions',
+        component: () => import('@/views/admin/PaperQuestions.vue')
       }
     ]
   }

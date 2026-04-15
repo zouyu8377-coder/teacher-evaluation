@@ -116,24 +116,23 @@ public class ExamQuestionService {
                         options.add(opt);
                     }
                 }
-                
-                boolean hasOption5 = options.size() >= 5;
-                boolean hasOption6 = options.size() == 6;
-                if (!hasOption5 && hasOption6) {
+
+                // 至少有2个选项才保存
+                if (options.size() < 2) {
                     continue;
                 }
-                
+
                 question.setOptions(toJson(options));
-                
-                int answerCol = type == ExamQuestion.QuestionType.single ? 7 : 8;
-                question.setCorrectAnswer(getCellValue(row.getCell(answerCol)));
-                
-                int scoreCol = type == ExamQuestion.QuestionType.single ? 8 : 9;
-                String scoreStr = getCellValue(row.getCell(scoreCol));
-                question.setScore(scoreStr != null ? Integer.parseInt(scoreStr) : 5);
-                
-                int expCol = type == ExamQuestion.QuestionType.single ? 9 : 10;
-                question.setExplanation(getCellValue(row.getCell(expCol)));
+
+                // 正确答案在第8列（索引7）
+                question.setCorrectAnswer(getCellValue(row.getCell(7)));
+
+                // 分值在第9列（索引8）
+                String scoreStr = getCellValue(row.getCell(8));
+                question.setScore(scoreStr != null && !scoreStr.isEmpty() ? Integer.parseInt(scoreStr) : 5);
+
+                // 解析在第10列（索引9）
+                question.setExplanation(getCellValue(row.getCell(9)));
                 
                 question.setDifficulty(1);
                 

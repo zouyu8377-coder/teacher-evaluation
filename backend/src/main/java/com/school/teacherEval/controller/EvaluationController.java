@@ -8,6 +8,8 @@ import com.school.teacherEval.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -25,7 +27,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Tag(name = "考核评分管理")
 public class EvaluationController {
-    
+
+    private static final Logger log = LoggerFactory.getLogger(EvaluationController.class);
+
     private final EvaluationService evaluationService;
     private final UserService userService;
     
@@ -114,20 +118,28 @@ public class EvaluationController {
     @Operation(summary = "提交评分")
     @PreAuthorize("hasRole('evaluator') or hasRole('admin')")
     public ApiResponse<Evaluation> createEvaluation(@RequestBody Map<String, Object> request) {
-        
+
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String username = auth.getName();
         User currentUser = userService.getCurrentUser(username);
-        
-        Long teacherId = Long.valueOf(request.get("teacherId").toString());
-        Long activityId = Long.valueOf(request.get("activityId").toString());
-        BigDecimal score = new BigDecimal(request.get("score").toString());
-        String comment = request.get("comment") != null ? request.get("comment").toString() : null;
-        
-        Evaluation evaluation = evaluationService.createOrUpdateEvaluation(
-                currentUser.getId(), teacherId, activityId, score, comment);
-        
-        return ApiResponse.success(evaluation);
+
+        log.info("提交评分请求: evaluator={}, teacherId={}, activityId={}, score={}",
+                currentUser.getId(), request.get("teacherId"), request.get("activityId"), request.get("score"));
+
+        try {
+            Long teacherId = Long.valueOf(request.get("teacherId").toString());
+            Long activityId = Long.valueOf(request.get("activityId").toString());
+            BigDecimal score = new BigDecimal(request.get("score").toString());
+            String comment = request.get("comment") != null ? request.get("comment").toString() : null;
+
+            Evaluation evaluation = evaluationService.createOrUpdateEvaluation(
+                    currentUser.getId(), teacherId, activityId, score, comment);
+
+            return ApiResponse.success(evaluation);
+        } catch (Exception e) {
+            log.error("提交评分失败", e);
+            throw e;
+        }
     }
     
     @GetMapping("/{id}")

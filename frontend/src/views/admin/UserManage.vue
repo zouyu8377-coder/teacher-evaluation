@@ -42,8 +42,9 @@
           </template>
         </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" />
-        <el-table-column label="操作" width="150">
+        <el-table-column label="操作" width="180">
           <template #default="{ row }">
+            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -92,7 +93,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getUserList, createUser } from '@/api/user'
+import { getUserList, createUser, updateUser, deleteUser } from '@/api/user'
 
 const query = reactive({
   page: 1,
@@ -143,17 +144,43 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
+const handleEdit = (row: any) => {
+  editId.value = row.id
+  Object.assign(form, {
+    username: row.username,
+    password: '',
+    realName: row.realName,
+    role: row.role,
+    department: row.department
+  })
+  dialogVisible.value = true
+}
+
 const handleSubmit = async () => {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
   loading.value = true
   try {
-    const res = await createUser(form)
-    if (res.code === 200) {
-      ElMessage.success('创建成功')
-      dialogVisible.value = false
-      loadData()
+    if (editId.value) {
+      const res = await updateUser(editId.value, {
+        realName: form.realName,
+        role: form.role,
+        department: form.department,
+        status: 1
+      })
+      if (res.code === 200) {
+        ElMessage.success('更新成功')
+        dialogVisible.value = false
+        loadData()
+      }
+    } else {
+      const res = await createUser(form)
+      if (res.code === 200) {
+        ElMessage.success('创建成功')
+        dialogVisible.value = false
+        loadData()
+      }
     }
   } finally {
     loading.value = false
@@ -162,7 +189,16 @@ const handleSubmit = async () => {
 
 const handleDelete = async (row: any) => {
   await ElMessageBox.confirm('确定要删除该用户吗？', '提示', { type: 'warning' })
-  ElMessage.info('删除功能待后端添加')
+  loading.value = true
+  try {
+    const res = await deleteUser(row.id)
+    if (res.code === 200) {
+      ElMessage.success('删除成功')
+      loadData()
+    }
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(() => {

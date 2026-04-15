@@ -282,8 +282,17 @@ public class ExamController {
     
     @GetMapping("/records/{id}/detail")
     @Operation(summary = "获取考试详情(含答案)")
-    @PreAuthorize("hasRole('evaluator') or hasRole('admin')")
+    @PreAuthorize("hasRole('teacher') or hasRole('evaluator') or hasRole('admin')")
     public ApiResponse<Map<String, Object>> getExamDetail(@PathVariable Long id) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User user = userService.getCurrentUser(auth.getName());
+        // 教师只能查看自己的考试详情
+        if (user.getRole() == User.Role.teacher) {
+            ExamRecord record = recordService.getRecordById(id);
+            if (!record.getTeacherId().equals(user.getId())) {
+                return ApiResponse.error(403, "权限不足");
+            }
+        }
         return ApiResponse.success(recordService.getExamDetail(id));
     }
     

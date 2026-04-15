@@ -65,4 +65,18 @@ public class ExamRecord {
     public enum Status {
         not_started, in_progress, submitted
     }
+
+    /**
+     * 判断考试是否已提交
+     */
+    public Boolean getIsSubmitted() {
+        return this.status == Status.submitted;
+    }
+
+    /**
+     * 获取更新时间，优先返回提交时间，否则返回创建时间
+     */
+    public LocalDateTime getUpdatedAt() {
+        return this.submittedAt != null ? this.submittedAt : this.createdAt;
+    }
 }

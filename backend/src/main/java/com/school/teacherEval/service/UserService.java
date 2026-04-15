@@ -3,9 +3,11 @@ package com.school.teacherEval.service;
 import com.school.teacherEval.dto.LoginRequest;
 import com.school.teacherEval.dto.LoginResponse;
 import com.school.teacherEval.entity.User;
+import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.UserRepository;
 import com.school.teacherEval.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -18,22 +20,26 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserService {
-    
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
-    
+
     public LoginResponse login(LoginRequest request) {
+        log.info("用户登录: {}", request.getUsername());
         User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("用户名或密码错误"));
-        
+                .orElseThrow(() -> new BusinessException("用户名或密码错误"));
+
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("用户名或密码错误");
+            log.warn("用户登录失败 - 密码错误: {}", request.getUsername());
+            throw new BusinessException("用户名或密码错误");
         }
-        
+
         if (user.getStatus() == 0) {
-            throw new RuntimeException("账号已被禁用");
+            log.warn("用户登录失败 - 账号已被禁用: {}", request.getUsername());
+            throw new BusinessException("账号已被禁用");
         }
         
         String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name());
@@ -70,16 +76,17 @@ public class UserService {
     @Transactional
     public User createUser(User user) {
         if (userRepository.existsByUsername(user.getUsername())) {
-            throw new RuntimeException("用户名已存在");
+            throw new BusinessException("用户名已存在");
         }
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+        log.info("创建用户: {}, 角色: {}", user.getUsername(), user.getRole());
         return userRepository.save(user);
     }
-    
+
     @Transactional
     public User updateUser(Long id, User user) {
         User existingUser = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> new BusinessException("用户不存在"));
         
         if (user.getRealName() != null) {
             existingUser.setRealName(user.getRealName());

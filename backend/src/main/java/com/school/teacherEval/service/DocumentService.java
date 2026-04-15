@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -143,5 +144,12 @@ public class DocumentService {
     public String getFileName(Long id) {
         Document document = getDocumentById(id);
         return document.getFileName();
+    }
+
+    public Optional<Document> getLatestDocument(Long userId, Long activityId) {
+        return documentRepository.findByUserIdAndActivityId(userId, activityId, PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt")))
+                .getContent()
+                .stream()
+                .findFirst();
     }
 }

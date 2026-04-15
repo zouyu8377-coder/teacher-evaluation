@@ -3,10 +3,12 @@ package com.school.teacherEval.service;
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Evaluation;
 import com.school.teacherEval.entity.PeriodEnrollment;
+import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.ActivityRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
 import com.school.teacherEval.repository.EnrollmentRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +17,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ActivityService {
     
     private final ActivityRepository activityRepository;
@@ -39,9 +42,49 @@ public class ActivityService {
     
     @Transactional
     public Activity create(Activity activity) {
+        // 校验报名时间必填
+        if (activity.getEnrollmentStart() == null) {
+            throw new BusinessException("报名开始时间不能为空");
+        }
+        if (activity.getEnrollmentEnd() == null) {
+            throw new BusinessException("报名结束时间不能为空");
+        }
+        if (activity.getEnrollmentStart().isAfter(activity.getEnrollmentEnd())) {
+            throw new BusinessException("报名开始时间必须早于报名结束时间");
+        }
+
+        // C级活动校验考试时间
+        if (activity.getLevel() == Activity.Level.C) {
+            if (activity.getExamStart() == null) {
+                throw new BusinessException("C级活动考试开始时间不能为空");
+            }
+            if (activity.getExamEnd() == null) {
+                throw new BusinessException("C级活动考试结束时间不能为空");
+            }
+            if (activity.getExamStart().isBefore(activity.getEnrollmentEnd())) {
+                throw new BusinessException("C级活动考试开始时间必须位于报名时间结束之后");
+            }
+            if (activity.getExamStart().isAfter(activity.getExamEnd())) {
+                throw new BusinessException("考试开始时间必须早于考试结束时间");
+            }
+        } else {
+            // 非C级活动校验材料上传时间
+            if (activity.getMaterialStart() == null) {
+                throw new BusinessException("材料上传开始时间不能为空");
+            }
+            if (activity.getMaterialEnd() == null) {
+                throw new BusinessException("材料上传结束时间不能为空");
+            }
+            if (activity.getMaterialStart().isAfter(activity.getMaterialEnd())) {
+                throw new BusinessException("材料上传开始时间必须早于材料上传结束时间");
+            }
+        }
+
         if (activity.getReviewerCount() == null) {
             activity.setReviewerCount(2);
         }
+        // C级固定为考试，其他级别固定为文档
+        activity.setHasExam(activity.getLevel() == Activity.Level.C);
         return activityRepository.save(activity);
     }
     
@@ -62,8 +105,42 @@ public class ActivityService {
         }
         if (updated.getEnrollmentStart() != null) activity.setEnrollmentStart(updated.getEnrollmentStart());
         if (updated.getEnrollmentEnd() != null) activity.setEnrollmentEnd(updated.getEnrollmentEnd());
+        if (updated.getExamStart() != null) activity.setExamStart(updated.getExamStart());
+        // 计算考试结束时间
+        if (updated.getExamStart() != null && updated.getExamDurationMinutes() != null) {
+            activity.setExamEnd(updated.getExamStart().plusMinutes(updated.getExamDurationMinutes()));
+        }
+        if (updated.getMaterialStart() != null) activity.setMaterialStart(updated.getMaterialStart());
+        if (updated.getMaterialEnd() != null) activity.setMaterialEnd(updated.getMaterialEnd());
         if (updated.getStartDate() != null) activity.setStartDate(updated.getStartDate());
         if (updated.getEndDate() != null) activity.setEndDate(updated.getEndDate());
+
+        // C级活动校验考试时间
+        if (activity.getLevel() == Activity.Level.C) {
+            if (activity.getExamStart() == null) {
+                throw new BusinessException("C级活动考试开始时间不能为空");
+            }
+            if (activity.getExamEnd() == null) {
+                throw new BusinessException("C级活动考试结束时间不能为空");
+            }
+            if (activity.getExamStart().isBefore(activity.getEnrollmentEnd())) {
+                throw new BusinessException("C级活动考试开始时间必须位于报名时间结束之后");
+            }
+            if (activity.getExamStart().isAfter(activity.getExamEnd())) {
+                throw new BusinessException("考试开始时间必须早于考试结束时间");
+            }
+        } else {
+            // 非C级活动校验材料上传时间
+            if (activity.getMaterialStart() == null) {
+                throw new BusinessException("材料上传开始时间不能为空");
+            }
+            if (activity.getMaterialEnd() == null) {
+                throw new BusinessException("材料上传结束时间不能为空");
+            }
+            if (activity.getMaterialStart().isAfter(activity.getMaterialEnd())) {
+                throw new BusinessException("材料上传开始时间必须早于材料上传结束时间");
+            }
+        }
         if (updated.getReviewerCount() != null) {
             Integer currentVal = activity.getReviewerCount();
             Integer newVal = updated.getReviewerCount();
@@ -75,8 +152,9 @@ public class ActivityService {
         }
         if (updated.getReviewerIds() != null) activity.setReviewerIds(updated.getReviewerIds());
         if (updated.getExamPaperId() != null) activity.setExamPaperId(updated.getExamPaperId());
-        if (updated.getHasExam() != null) activity.setHasExam(updated.getHasExam());
+        // 只有在创建时才设置hasExam，update时不自动修改
         if (updated.getExamDurationMinutes() != null) activity.setExamDurationMinutes(updated.getExamDurationMinutes());
+        // 保存时保持原有status，不自动更新
         return activityRepository.save(activity);
     }
     
@@ -111,35 +189,42 @@ public class ActivityService {
     
     public boolean canEnroll(Long activityId, Long teacherId) {
         Activity activity = getById(activityId);
-        Activity.Level currentLevel = activity.getLevel();
-        
-        if (currentLevel == Activity.Level.C) {
+        Activity.Level targetLevel = activity.getLevel();
+
+        // C级没有前置要求
+        if (targetLevel.getPrevLevels().isEmpty()) {
             return true;
         }
-        
-        Activity.Level prevLevel = Activity.Level.getPrevLevel(currentLevel);
-        
-        List<PeriodEnrollment> prevEnrollments = enrollmentRepository.findByTeacherId(teacherId);
-        
-        for (PeriodEnrollment enrollment : prevEnrollments) {
+
+        // 获取该教师所有已通过的活动级别
+        List<PeriodEnrollment> enrollments = enrollmentRepository.findByTeacherId(teacherId);
+        for (PeriodEnrollment enrollment : enrollments) {
             if (enrollment.getStatus() != PeriodEnrollment.Status.enrolled) {
                 continue;
             }
+
             Activity prevActivity = activityRepository.findById(enrollment.getActivityId()).orElse(null);
-            if (prevActivity == null || prevActivity.getLevel() != prevLevel) {
+            if (prevActivity == null) {
                 continue;
             }
-            
-            List<Evaluation> evals = evaluationRepository.findByTeacherIdAndActivityId(teacherId, enrollment.getActivityId());
-            for (Evaluation eval : evals) {
-                if (eval.getStatus() == Evaluation.Status.submitted && 
-                    eval.getIsPublished() != null && eval.getIsPublished() &&
-                    eval.getFinalScore() != null && eval.getFinalScore().compareTo(new java.math.BigDecimal("60")) >= 0) {
-                    return true;
+
+            Activity.Level passedLevel = prevActivity.getLevel();
+
+            // 检查通过的级别是否是目标级别的前置级别之一
+            if (Activity.Level.canProgressTo(passedLevel, targetLevel)) {
+                // 需要确认该活动已发布成绩且及格
+                List<Evaluation> evals = evaluationRepository.findByTeacherIdAndActivityId(teacherId, enrollment.getActivityId());
+                for (Evaluation eval : evals) {
+                    if (eval.getStatus() == Evaluation.Status.submitted &&
+                        Boolean.TRUE.equals(eval.getIsPublished()) &&
+                        eval.getFinalScore() != null &&
+                        eval.getFinalScore().compareTo(new java.math.BigDecimal("60")) >= 0) {
+                        return true;
+                    }
                 }
             }
         }
-        
+
         return false;
     }
     
@@ -159,8 +244,29 @@ public class ActivityService {
     public void validateCapacityUpdate(Long activityId, Integer newMaxParticipants) {
         long currentCount = getEnrolledCount(activityId);
         if (newMaxParticipants != null && newMaxParticipants < currentCount) {
-            throw new RuntimeException("容量不能小于当前已报名人数(" + currentCount + "人)");
+            throw new BusinessException("容量不能小于当前已报名人数(" + currentCount + "人)");
         }
+    }
+
+    /**
+     * 删除活动前的关联检查
+     */
+    public void validateDelete(Long id) {
+        Activity activity = getById(id);
+
+        // 检查是否有报名记录
+        long enrollmentCount = enrollmentRepository.countByActivityIdAndStatus(id, PeriodEnrollment.Status.enrolled);
+        if (enrollmentCount > 0) {
+            throw new BusinessException("该活动已有 " + enrollmentCount + " 人报名，无法删除");
+        }
+
+        // 检查是否有评分记录
+        long evalCount = evaluationRepository.countByActivityId(id);
+        if (evalCount > 0) {
+            throw new BusinessException("该活动已有评分记录，无法删除");
+        }
+
+        log.info("删除活动验证通过: {}, 名称: {}", id, activity.getName());
     }
     
     public long getPassedCountByLevel(Activity.Level level) {

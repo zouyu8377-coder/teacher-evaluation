@@ -75,7 +75,18 @@ public class DataInitializer {
                 System.out.println("测试用户数据初始化完成！");
             }
             
-            // 2. 初始化活动（直接包含周期信息）
+            // 2. 修复现有活动的hasExam值（C级=true，其他级别=false）
+            List<Activity> allActivities = activityRepository.findAll();
+            for (Activity activity : allActivities) {
+                boolean shouldBeExam = activity.getLevel() == Activity.Level.C;
+                if (activity.getHasExam() == null || activity.getHasExam() != shouldBeExam) {
+                    activity.setHasExam(shouldBeExam);
+                    activityRepository.save(activity);
+                    System.out.println("修复活动[" + activity.getName() + "] hasExam=" + shouldBeExam);
+                }
+            }
+
+            // 3. 初始化活动（直接包含周期信息）
             if (activityRepository.count() == 0) {
                 List<Activity> activities = new ArrayList<>();
                 

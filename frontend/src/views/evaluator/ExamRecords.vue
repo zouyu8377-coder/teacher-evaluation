@@ -2,10 +2,13 @@
   <div class="exam-records">
     <el-card>
       <template #header>
-        <span>C级考试管理</span>
+        <div class="header-wrapper">
+          <span>{{ singleMode ? '考试详情' : 'C级考试管理' }}</span>
+          <el-button v-if="singleMode" @click="$router.back()">返回列表</el-button>
+        </div>
       </template>
-      
-      <el-form inline>
+
+      <el-form v-if="!singleMode" inline>
         <el-form-item label="活动">
           <el-select v-model="query.activityId" placeholder="请选择" clearable filterable @change="loadData" style="width: 250px;">
             <el-option v-for="a in activities" :key="a.id" :label="`${a.level}级 - ${a.name}`" :value="a.id" />
@@ -79,7 +82,7 @@
       />
     </el-card>
 
-    <el-dialog v-model="showDetail" title="考试详情" width="900px" top="5vh">
+    <el-dialog v-model="showDetail" title="考试详情" width="95%" top="2vh" :close-on-click-modal="false">
       <div v-if="currentRecord" class="detail-content">
         <el-descriptions :column="4" border class="mb-3">
           <el-descriptions-item label="教师">{{ currentRecord.teacherName }}</el-descriptions-item>
@@ -144,15 +147,18 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getExamRecordsByActivity, getExamRecordDetail, adjustScore } from '@/api/exam'
 import { getActivityList, getActivitiesByPeriod } from '@/api/activity'
 import { publishEvaluationScores } from '@/api/evaluation'
 
+const route = useRoute()
 const loading = ref(false)
 const showDetail = ref(false)
 const showAdjust = ref(false)
 const adjusting = ref(false)
+const singleMode = ref(false)
 
 const activities = ref<any[]>([])
 const tableData = ref<any[]>([])
@@ -185,6 +191,27 @@ const loadData = async () => {
     }
   } finally {
     loading.value = false
+  }
+}
+
+const loadSingleRecord = async () => {
+  const activityId = Number(route.query.activityId)
+  const teacherId = Number(route.params.teacherId)
+  if (activityId && teacherId) {
+    singleMode.value = true
+    query.activityId = activityId
+    loading.value = true
+    try {
+      const res = await getExamRecordsByActivity(activityId, 1, 20)
+      if (res.code === 200) {
+        const record = res.data.content.find((r: any) => r.teacherId === teacherId)
+        if (record) {
+          await viewDetail(record)
+        }
+      }
+    } finally {
+      loading.value = false
+    }
   }
 }
 
@@ -250,12 +277,25 @@ const publishScore = async (row: any) => {
   }
 }
 
-onMounted(() => {
-  loadActivities()
+onMounted(async () => {
+  // 检查是否单条记录模式（从ActivityManage跳转）
+  const activityId = route.query.activityId
+  const teacherId = route.params.teacherId
+  if (activityId && teacherId) {
+    await loadActivities()
+    await loadSingleRecord()
+  } else {
+    await loadActivities()
+  }
 })
 </script>
 
 <style scoped>
+.header-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 .mb-3 {
   margin-bottom: 20px;
 }

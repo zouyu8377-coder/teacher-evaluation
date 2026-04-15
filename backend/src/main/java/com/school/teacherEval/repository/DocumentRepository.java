@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+
 @Repository
 public interface DocumentRepository extends JpaRepository<Document, Long> {
     
@@ -19,6 +21,9 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     
     @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 AND d.userId = :userId AND d.activityId = :activityId ORDER BY d.createdAt DESC")
     Page<Document> findByUserIdAndActivityId(@Param("userId") Long userId, @Param("activityId") Long activityId, Pageable pageable);
+
+    @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 AND d.userId = :userId AND d.activityId = :activityId ORDER BY d.createdAt DESC")
+    Optional<Document> findFirstByActivityIdAndUserId(@Param("activityId") Long activityId, @Param("userId") Long userId);
     
     @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 ORDER BY d.createdAt DESC")
     Page<Document> findAllActive(Pageable pageable);

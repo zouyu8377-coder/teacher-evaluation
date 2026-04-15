@@ -87,8 +87,8 @@ export const getPapers = (params: { periodId: number; page?: number; size?: numb
   return api.get('/exam/papers', { params })
 }
 
-export const getPapersByPeriod = (periodId: number) => {
-  return api.get(`/exam/papers/period/${periodId}`)
+export const getPapersByPeriod = () => {
+  return api.get('/exam/papers', { params: { page: 1, size: 100 } })
 }
 
 export const getPaperById = (id: number) => {

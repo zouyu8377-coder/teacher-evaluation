@@ -8,7 +8,17 @@
         </div>
       </template>
 
-      <el-table :data="tableData" stripe v-loading="loading">
+      <el-form inline>
+        <el-form-item label="报名状态">
+          <el-select v-model="enrollmentStatusFilter" placeholder="全部" clearable style="width: 150px;">
+            <el-option label="未开始报名" value="pending" />
+            <el-option label="报名中" value="active" />
+            <el-option label="报名已截止" value="ended" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <el-table :data="filteredActivities" stripe v-loading="loading">
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="活动名称" />
         <el-table-column prop="level" label="级别">
@@ -16,14 +26,13 @@
             <el-tag :type="getLevelType(row.level)">{{ row.level }}级</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="startDate" label="开始日期" width="120">
+        <el-table-column label="时间安排" width="200">
           <template #default="{ row }">
-            {{ row.startDate || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="endDate" label="结束日期" width="120">
-          <template #default="{ row }">
-            {{ row.endDate || '-' }}
+            <div class="time-cell">
+              <div>报名: {{ formatDateTime(row.enrollmentStart) }} ~ {{ formatDateTime(row.enrollmentEnd) }}</div>
+              <div v-if="row.level === 'C'">考试: {{ formatDateTime(row.examStart) }} ~ {{ formatDateTime(row.examEnd) }}</div>
+              <div v-else>上传: {{ formatDateTime(row.materialStart) }} ~ {{ formatDateTime(row.materialEnd) }}</div>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="maxParticipants" label="总名额">
@@ -52,11 +61,10 @@
             {{ formatDateTime(row.enrollmentStart) }} ~ {{ formatDateTime(row.enrollmentEnd) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280">
+        <el-table-column label="操作" width="200">
           <template #default="{ row }">
             <div class="action-buttons">
-              <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-              <el-button type="info" link @click="handleReviewerConfig(row)">评分人</el-button>
+              <el-button type="success" link @click="goToDetail(row)">详情</el-button>
               <el-button :type="row.status === 'active' ? 'warning' : 'success'" link @click="toggleStatus(row)">
                 {{ row.status === 'active' ? '关闭' : '启用' }}
               </el-button>
@@ -83,13 +91,25 @@
         </el-form-item>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="考核开始">
-              <el-date-picker v-model="form.startDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+            <el-form-item label="报名开始" prop="enrollmentStart">
+              <el-date-picker v-model="form.enrollmentStart" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="考核结束">
-              <el-date-picker v-model="form.endDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+            <el-form-item label="报名截止" prop="enrollmentEnd">
+              <el-date-picker v-model="form.enrollmentEnd" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20" v-if="form.level === 'C'">
+          <el-col :span="12">
+            <el-form-item label="考试开始" prop="examStart">
+              <el-date-picker v-model="form.examStart" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="考试截止" prop="examEnd">
+              <el-date-picker v-model="form.examEnd" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -98,21 +118,9 @@
           <span style="margin-left: 10px; color: #999;">0表示不限制</span>
         </el-form-item>
         <el-form-item label="评分人数" prop="reviewerCount">
-          <el-input-number v-model="form.reviewerCount" :min="1" :max="10" />
-          <span style="margin-left: 10px; color: #999;">需要评分的考核员数量</span>
+          <el-input :value="form.selectedReviewers?.length || 0" disabled />
+          <span style="margin-left: 10px; color: #999;">人在评分人配置中设置</span>
         </el-form-item>
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="报名开始">
-              <el-date-picker v-model="form.enrollmentStart" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="报名截止">
-              <el-date-picker v-model="form.enrollmentEnd" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-        </el-row>
         <el-form-item label="说明">
           <el-input v-model="form.description" type="textarea" :rows="3" />
         </el-form-item>
@@ -124,13 +132,17 @@
     </el-dialog>
 
     <el-dialog v-model="reviewerDialogVisible" title="评分人配置" width="500px">
+      <el-alert type="info" :closable="false" class="mb-3">
+        勾选评分人后，评分人数将自动同步为勾选的人数
+      </el-alert>
       <el-form label-width="100px">
         <el-form-item label="评分人数">
-          <el-input-number v-model="reviewerConfig.reviewerCount" :min="1" :max="10" />
+          <el-input :value="reviewerConfig.selectedReviewers.length" disabled />
+          <span style="margin-left: 10px; color: #999;">人（由勾选的评分人自动计算）</span>
         </el-form-item>
         <el-form-item label="选择评分人">
           <el-checkbox-group v-model="reviewerConfig.selectedReviewers">
-            <el-checkbox v-for="e in evaluators" :key="e.id" :label="e.id">
+            <el-checkbox v-for="e in evaluators" :key="e.id" :value="e.id">
               {{ e.realName }} ({{ e.department }})
             </el-checkbox>
           </el-checkbox-group>
@@ -145,8 +157,11 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+
+const router = useRouter()
 import { getActivityList, createActivity, updateActivity, deleteActivity, getEnrollmentInfo, updateReviewerConfig } from '@/api/activity'
 import { getEvaluators } from '@/api/user'
 
@@ -156,30 +171,41 @@ const reviewerDialogVisible = ref(false)
 const formRef = ref()
 const editId = ref<number | null>(null)
 const currentActivityId = ref<number | null>(null)
+const enrollmentStatusFilter = ref<string>('')
 
 const tableData = ref<any[]>([])
 const evaluators = ref<any[]>([])
 
+const filteredActivities = computed(() => {
+  if (!enrollmentStatusFilter.value) return tableData.value
+  return tableData.value.filter(a => a.enrollmentStatus === enrollmentStatusFilter.value)
+})
+
 const form = reactive({
   name: '',
   level: '',
-  startDate: '',
-  endDate: '',
   maxParticipants: 0,
   reviewerCount: 2,
+  selectedReviewers: [] as number[],
   enrollmentStart: '',
   enrollmentEnd: '',
+  examStart: '',
+  examEnd: '',
   description: ''
 })
 
 const reviewerConfig = reactive({
-  reviewerCount: 2,
+  reviewerCount: 0,
   selectedReviewers: [] as number[]
 })
 
 const rules = {
   name: [{ required: true, message: '请输入活动名称', trigger: 'blur' }],
-  level: [{ required: true, message: '请选择级别', trigger: 'change' }]
+  level: [{ required: true, message: '请选择级别', trigger: 'change' }],
+  enrollmentStart: [{ required: true, message: '请选择报名开始时间', trigger: 'change' }],
+  enrollmentEnd: [{ required: true, message: '请选择报名截止时间', trigger: 'change' }],
+  examStart: [{ required: true, message: '请选择考试开始时间', trigger: 'change' }],
+  examEnd: [{ required: true, message: '请选择考试截止时间', trigger: 'change' }]
 }
 
 const getLevelType = (level: string) => {
@@ -204,7 +230,21 @@ const loadData = async () => {
     const res = await getActivityList()
     if (res.code === 200) {
       const activities = res.data || []
+      const now = new Date()
+
       for (const activity of activities) {
+        // 计算报名状态
+        const enrollmentStart = activity.enrollmentStart ? new Date(activity.enrollmentStart) : null
+        const enrollmentEnd = activity.enrollmentEnd ? new Date(activity.enrollmentEnd) : null
+
+        if (enrollmentStart && now < enrollmentStart) {
+          activity.enrollmentStatus = 'pending' // 未到报名时间
+        } else if (enrollmentEnd && now > enrollmentEnd) {
+          activity.enrollmentStatus = 'ended' // 已过报名时间
+        } else {
+          activity.enrollmentStatus = 'active' // 报名时间段内
+        }
+
         try {
           const infoRes = await getEnrollmentInfo(activity.id)
           activity.enrolledCount = infoRes.data.enrolledCount
@@ -214,6 +254,14 @@ const loadData = async () => {
           activity.remaining = -1
         }
       }
+
+      // 排序：按报名开始时间从旧到新
+      activities.sort((a, b) => {
+        const aTime = a.enrollmentStart ? new Date(a.enrollmentStart).getTime() : 0
+        const bTime = b.enrollmentStart ? new Date(b.enrollmentStart).getTime() : 0
+        return aTime - bTime
+      })
+
       tableData.value = activities
     }
   } finally {
@@ -233,15 +281,19 @@ const handleAdd = () => {
   Object.assign(form, {
     name: '',
     level: '',
-    startDate: '',
-    endDate: '',
     maxParticipants: 0,
     reviewerCount: 2,
     enrollmentStart: '',
     enrollmentEnd: '',
+    examStart: '',
+    examEnd: '',
     description: ''
   })
   dialogVisible.value = true
+}
+
+const goToDetail = (row: any) => {
+  router.push(`/admin/activities/${row.id}`)
 }
 
 const handleEdit = (row: any) => {
@@ -249,12 +301,13 @@ const handleEdit = (row: any) => {
   Object.assign(form, {
     name: row.name,
     level: row.level,
-    startDate: row.startDate,
-    endDate: row.endDate,
     maxParticipants: row.maxParticipants || 0,
     reviewerCount: row.reviewerCount !== undefined && row.reviewerCount !== null ? row.reviewerCount : 2,
+    selectedReviewers: row.reviewerIds ? JSON.parse(row.reviewerIds).map((id: number) => id) : [],
     enrollmentStart: row.enrollmentStart,
     enrollmentEnd: row.enrollmentEnd,
+    examStart: row.examStart,
+    examEnd: row.examEnd,
     description: row.description
   })
   dialogVisible.value = true
@@ -269,9 +322,11 @@ const handleReviewerConfig = (row: any) => {
 
 const handleSaveReviewerConfig = async () => {
   if (!currentActivityId.value) return
-  
+
+  // 自动同步评分人数为勾选的评分员数量
+  const reviewerCount = reviewerConfig.selectedReviewers.length
   const reviewerIds = JSON.stringify(reviewerConfig.selectedReviewers)
-  await updateReviewerConfig(currentActivityId.value, reviewerConfig.reviewerCount, reviewerIds)
+  await updateReviewerConfig(currentActivityId.value, reviewerCount, reviewerIds)
   ElMessage.success('评分人配置已保存')
   reviewerDialogVisible.value = false
   loadData()
@@ -280,6 +335,16 @@ const handleSaveReviewerConfig = async () => {
 const handleSubmit = async () => {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
+
+  // 前端校验：考试时间必须在报名截止之后
+  if (form.level === 'C' && form.enrollmentStart && form.enrollmentEnd && form.examStart) {
+    const enrollmentEnd = new Date(form.enrollmentEnd)
+    const examStart = new Date(form.examStart)
+    if (examStart <= enrollmentEnd) {
+      ElMessage.error('考试时间应在报名结束之后')
+      return
+    }
+  }
 
   loading.value = true
   try {
@@ -341,6 +406,9 @@ onMounted(() => {
 .text-danger {
   color: #f56c6c;
   font-weight: bold;
+}
+.mb-3 {
+  margin-bottom: 16px;
 }
 .action-buttons {
   display: flex;

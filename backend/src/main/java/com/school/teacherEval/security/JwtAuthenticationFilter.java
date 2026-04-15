@@ -37,15 +37,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String role = jwtUtil.getRoleFromToken(token);
                 
                 User user = userRepository.findByUsername(username).orElse(null);
-                
-                UsernamePasswordAuthenticationToken authentication = 
-                        new UsernamePasswordAuthenticationToken(
-                                user,
-                                null,
-                                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
-                        );
-                
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                if (user != null) {
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    username,  // 使用username作为principal，而不是User对象
+                                    null,
+                                    Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
+                            );
+
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             }
         }
         

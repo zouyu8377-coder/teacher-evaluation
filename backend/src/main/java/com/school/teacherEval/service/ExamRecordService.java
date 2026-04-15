@@ -3,6 +3,7 @@ package com.school.teacherEval.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.teacherEval.entity.*;
+import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -34,21 +35,41 @@ public class ExamRecordService {
         if (!Boolean.TRUE.equals(activity.getHasExam()) || activity.getExamPaperId() == null) {
             throw new RuntimeException("该活动没有关联试卷");
         }
-        
-        // 检查是否已有进行中或已提交的考试记录
+
+        // 检查当前时间是否在考试时间段内
+        LocalDateTime now = LocalDateTime.now();
+        if (activity.getExamStart() == null || activity.getExamEnd() == null) {
+            throw new RuntimeException("该活动考试时间未设置");
+        }
+        if (now.isBefore(activity.getExamStart())) {
+            throw new BusinessException("考试尚未开始，开始时间：" + activity.getExamStart().toString().replace("T", " "));
+        }
+        if (now.isAfter(activity.getExamEnd())) {
+            throw new BusinessException("考试已结束，结束时间：" + activity.getExamEnd().toString().replace("T", " "));
+        }
+
+        // 检查是否已有已提交的考试记录
         Optional<ExamRecord> existing = recordRepository.findByTeacherIdAndActivityIdAndStatus(
             teacherId, activityId, ExamRecord.Status.submitted);
         if (existing.isPresent()) {
-            throw new RuntimeException("您已完成该考试");
+            // 检查成绩是否已发布，如果已发布则不允许重新考试
+            List<Evaluation> evals = evaluationRepository.findByTeacherIdAndActivityId(teacherId, activityId);
+            if (!evals.isEmpty()) {
+                Evaluation eval = evals.get(0);
+                if (Boolean.TRUE.equals(eval.getIsPublished())) {
+                    throw new RuntimeException("成绩已发布，无法重新考试");
+                }
+            }
+            // 成绩未发布，才允许重新考试（可能是成绩发布前想重考）
         }
-        
+
         // 检查是否有进行中的考试
         Optional<ExamRecord> inProgress = recordRepository.findByTeacherIdAndActivityIdAndStatus(
             teacherId, activityId, ExamRecord.Status.in_progress);
         if (inProgress.isPresent()) {
             return inProgress.get();
         }
-        
+
         // 创建考试记录
         ExamRecord record = new ExamRecord();
         record.setPaperId(activity.getExamPaperId());
@@ -56,7 +77,7 @@ public class ExamRecordService {
         record.setTeacherId(teacherId);
         record.setStatus(ExamRecord.Status.in_progress);
         record.setStartedAt(LocalDateTime.now());
-        
+
         return recordRepository.save(record);
     }
     
@@ -132,11 +153,24 @@ public class ExamRecordService {
             questions.add(qMap);
         }
         
+        // 获取活动的考试时长（优先使用活动的设置）
+        Integer durationMinutes = paper.getDurationMinutes();
+        if (record.getActivityId() != null) {
+            try {
+                Activity activity = activityService.getById(record.getActivityId());
+                if (activity.getExamDurationMinutes() != null && activity.getExamDurationMinutes() > 0) {
+                    durationMinutes = activity.getExamDurationMinutes();
+                }
+            } catch (Exception e) {
+                // 忽略活动获取失败，使用试卷默认时长
+            }
+        }
+
         Map<String, Object> result = new HashMap<>();
         result.put("paper", Map.of(
             "id", paper.getId(),
             "name", paper.getName(),
-            "durationMinutes", paper.getDurationMinutes(),
+            "durationMinutes", durationMinutes,
             "totalScore", paper.getTotalScore()
         ));
         result.put("record", Map.of(

@@ -91,10 +91,8 @@ const navigate = (path: string) => {
 }
 
 const teacherMenus = [
-  { path: '/teacher/enrollment', label: '我的考核', icon: 'calendar_month' },
-  { path: '/teacher/documents', label: '我的文档', icon: 'description' },
-  { path: '/teacher/upload', label: '文档上传', icon: 'upload' },
-  { path: '/teacher/scores', label: '我的成绩', icon: 'insights' }
+  { path: '/teacher/dashboard', label: '个人首页', icon: 'home' },
+  { path: '/teacher/enrollment', label: '我的考核', icon: 'calendar_month' }
 ]
 
 const evaluatorMenus = [

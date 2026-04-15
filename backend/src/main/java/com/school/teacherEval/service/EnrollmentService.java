@@ -1,6 +1,7 @@
 package com.school.teacherEval.service;
 
 import com.school.teacherEval.entity.Activity;
+import com.school.teacherEval.entity.Evaluation;
 import com.school.teacherEval.entity.PeriodEnrollment;
 import com.school.teacherEval.entity.User;
 import com.school.teacherEval.repository.ActivityRepository;
@@ -38,23 +39,44 @@ public class EnrollmentService {
     }
     
     private boolean canEnroll(Long teacherId, Activity activity) {
-        Activity.Level level = activity.getLevel();
-        if (level == Activity.Level.C) {
+        Activity.Level targetLevel = activity.getLevel();
+
+        // C级没有前置要求
+        if (targetLevel.getPrevLevels().isEmpty()) {
             return true;
         }
-        
-        Activity.Level prevLevel = Activity.Level.getPrevLevel(level);
-        if (prevLevel == null) {
-            return true;
+
+        // 获取该教师所有已通过的活动级别
+        List<PeriodEnrollment> enrollments = enrollmentRepository.findByTeacherId(teacherId);
+
+        for (PeriodEnrollment enrollment : enrollments) {
+            if (enrollment.getStatus() != PeriodEnrollment.Status.enrolled) {
+                continue;
+            }
+
+            Activity prevActivity = activityRepository.findById(enrollment.getActivityId()).orElse(null);
+            if (prevActivity == null) {
+                continue;
+            }
+
+            Activity.Level passedLevel = prevActivity.getLevel();
+
+            // 检查通过的级别是否是目标级别的前置级别之一
+            if (Activity.Level.canProgressTo(passedLevel, targetLevel)) {
+                // 需要确认该活动已发布成绩且及格
+                var evals = evaluationRepository.findByTeacherIdAndActivityId(teacherId, enrollment.getActivityId());
+                for (var eval : evals) {
+                    if (eval.getStatus() == Evaluation.Status.submitted &&
+                        Boolean.TRUE.equals(eval.getIsPublished()) &&
+                        eval.getFinalScore() != null &&
+                        eval.getFinalScore().compareTo(new java.math.BigDecimal("60")) >= 0) {
+                        return true;
+                    }
+                }
+            }
         }
-        
-        return evaluationRepository.findByTeacherIdAndActivityIdAndScoreGreaterThanEqual(teacherId, 
-            getLastActivityId(teacherId, prevLevel), 60).isPresent();
-    }
-    
-    private Long getLastActivityId(Long teacherId, Activity.Level level) {
-        List<Activity> activities = activityRepository.findByLevel(level);
-        return activities.isEmpty() ? null : activities.get(0).getId();
+
+        return false;
     }
     
     @Transactional
@@ -111,7 +133,11 @@ public class EnrollmentService {
             .toList();
         return userRepository.findAllById(teacherIds);
     }
-    
+
+    public PeriodEnrollment getEnrollment(Long activityId, Long teacherId) {
+        return enrollmentRepository.findByActivityIdAndTeacherId(activityId, teacherId).orElse(null);
+    }
+
     @Transactional
     public void removeEnrollment(Long activityId, Long teacherId) {
         PeriodEnrollment enrollment = enrollmentRepository

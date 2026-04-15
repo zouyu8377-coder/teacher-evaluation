@@ -2,9 +2,9 @@
   <header class="app-header">
     <div class="header-search">
       <span class="material-symbols-outlined search-icon">search</span>
-      <input 
-        type="text" 
-        class="search-input" 
+      <input
+        type="text"
+        class="search-input"
         placeholder="搜索教师、考核记录..."
         v-model="searchKeyword"
       />
@@ -80,7 +80,7 @@ const handleCommand = async (command: string) => {
     try {
       await logout()
     } catch (e) {
-      // ignore
+      console.warn('登出API调用失败:', e)
     }
     userStore.logout()
     ElMessage.success('已退出登录')
@@ -253,7 +253,7 @@ const handleCommand = async (command: string) => {
   .app-header {
     padding: 0 20px;
   }
-  
+
   .header-search {
     max-width: 300px;
   }

@@ -8,26 +8,78 @@
         </div>
       </template>
 
+      <!-- C级考核：显示考试信息 -->
+      <div v-if="currentActivity?.level === 'C'" class="exam-info-section">
+        <el-alert type="info" :closable="false" class="mb-3">
+          <template #title>
+            <span>C级考核为考试形式，已自动计算客观分数，可在此基础上调整</span>
+          </template>
+        </el-alert>
+
+        <el-descriptions :column="3" border class="mb-3">
+          <el-descriptions-item label="自动得分">{{ examRecord?.autoScore || examRecord?.score || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="调整分值">{{ examRecord?.manualAdjust || 0 }}</el-descriptions-item>
+          <el-descriptions-item label="最终得分">{{ examRecord?.finalScore || examRecord?.score || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="正确题数">{{ examRecord?.correctCount || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="错误题数">{{ examRecord?.wrongCount || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="考试状态">
+            <el-tag :type="examRecord?.status === 'submitted' ? 'success' : 'info'">
+              {{ examRecord?.status === 'submitted' ? '已完成' : '进行中' }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <el-button type="primary" link @click="viewExamDetail" v-if="examRecord">
+          查看答卷详情
+        </el-button>
+      </div>
+
+      <!-- 非C级考核：显示文档信息 -->
+      <div v-else-if="currentActivity" class="document-info-section">
+        <el-alert type="info" :closable="false" class="mb-3">
+          <template #title>
+            <span>该考核为文档形式，请先查看教师上传的作业文档</span>
+          </template>
+        </el-alert>
+
+        <el-descriptions :column="2" border class="mb-3">
+          <el-descriptions-item label="文档标题">{{ document?.title || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="文件名">{{ document?.fileName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="上传时间">{{ document?.createdAt || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="文件大小">{{ formatFileSize(document?.fileSize) }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-button type="primary" @click="downloadDocument" v-if="document">
+          下载文档
+        </el-button>
+        <el-button type="primary" link @click="viewDocument" v-if="document">
+          在线预览
+        </el-button>
+        <span v-if="!document" class="text-muted">教师尚未上传文档</span>
+      </div>
+
+      <el-divider />
+
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-form-item label="教师姓名">
           <el-input :value="teacherName" disabled />
         </el-form-item>
-        
+
         <el-form-item label="考核活动" prop="activityId">
-          <el-select v-model="form.activityId" placeholder="请选择考核活动">
+          <el-select v-model="form.activityId" placeholder="请选择考核活动" @change="onActivityChange">
             <el-option v-for="a in activities" :key="a.id" :label="`${a.name} (${a.level}级)`" :value="a.id" />
           </el-select>
         </el-form-item>
-        
+
         <el-form-item label="评分" prop="score">
           <el-input-number v-model="form.score" :min="0" :max="100" :precision="1" />
           <span style="margin-left: 10px;">分 (0-100)</span>
         </el-form-item>
-        
+
         <el-form-item label="评语" prop="comment">
           <el-input v-model="form.comment" type="textarea" :rows="4" maxlength="2000" show-word-limit placeholder="请输入评语" />
         </el-form-item>
-        
+
         <el-form-item>
           <el-button type="primary" :loading="loading" @click="handleSubmit">提交评分</el-button>
         </el-form-item>
@@ -53,6 +105,8 @@ import { ElMessage } from 'element-plus'
 import { submitEvaluation, getEvaluationList } from '@/api/evaluation'
 import { getActivityList } from '@/api/activity'
 import { getTeachers } from '@/api/user'
+import { getExamRecordsByActivity } from '@/api/exam'
+import { getTeacherDocuments } from '@/api/document'
 
 const route = useRoute()
 const router = useRouter()
@@ -77,6 +131,71 @@ const rules = {
 
 const activities = ref<any[]>([])
 const historyData = ref<any[]>([])
+const currentActivity = ref<any>(null)
+const examRecord = ref<any>(null)
+const document = ref<any>(null)
+
+const currentActivityId = computed(() => form.activityId || activityId.value)
+
+const currentActivityLevel = computed(() => currentActivity.value?.level)
+
+const onActivityChange = async () => {
+  const activity = activities.value.find(a => a.id === form.activityId)
+  currentActivity.value = activity
+  if (activity) {
+    if (activity.level === 'C') {
+      await loadExamRecord()
+    } else {
+      await loadDocument()
+    }
+  }
+}
+
+const loadExamRecord = async () => {
+  if (!currentActivityId.value) return
+  const res = await getExamRecordsByActivity(currentActivityId.value, 1, 20)
+  if (res.code === 200) {
+    const record = res.data.content.find((r: any) => r.teacherId === teacherId.value)
+    if (record) {
+      examRecord.value = record
+      // C级考核默认使用考试得分
+      form.score = record.finalScore || record.score || 0
+    }
+  }
+}
+
+const loadDocument = async () => {
+  if (!currentActivityId.value) return
+  const res = await getTeacherDocuments(teacherId.value, currentActivityId.value)
+  if (res.code === 200 && res.data.content.length > 0) {
+    document.value = res.data.content[0]
+  } else {
+    document.value = null
+  }
+}
+
+const viewExamDetail = () => {
+  router.push(`/evaluator/exam-records/${teacherId.value}?activityId=${currentActivityId.value}`)
+}
+
+const viewDocument = () => {
+  if (document.value) {
+    router.push(`/evaluator/documents/${teacherId.value}?activityId=${currentActivityId.value}`)
+  }
+}
+
+const downloadDocument = () => {
+  if (document.value?.fileUrl) {
+    window.open(document.value.fileUrl, '_blank')
+  }
+}
+
+const formatFileSize = (bytes: number) => {
+  if (!bytes) return '-'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
 
 const loadActivities = async () => {
   const res = await getActivityList()
@@ -84,6 +203,16 @@ const loadActivities = async () => {
     activities.value = res.data
     if (activityId.value) {
       form.activityId = activityId.value
+      // 设置当前活动并加载相关信息
+      const activity = activities.value.find(a => a.id === activityId.value)
+      currentActivity.value = activity
+      if (activity) {
+        if (activity.level === 'C') {
+          await loadExamRecord()
+        } else {
+          await loadDocument()
+        }
+      }
     }
   }
 }
@@ -146,6 +275,15 @@ onMounted(() => {
 }
 
 .evaluation-form {
-  max-width: 700px;
+  max-width: 900px;
+}
+
+.mb-3 {
+  margin-bottom: 16px;
+}
+
+.text-muted {
+  color: #909399;
+  font-size: 14px;
 }
 </style>

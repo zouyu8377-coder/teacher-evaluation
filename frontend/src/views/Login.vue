@@ -79,17 +79,18 @@ const handleLogin = async () => {
       userStore.setToken(res.data.token)
       userStore.setUser(res.data.user)
       ElMessage.success('登录成功')
-      
+
       const role = res.data.user.role
       if (role === 'admin') router.push('/admin/dashboard')
       else if (role === 'evaluator') router.push('/evaluator/activities')
-      else if (role === 'teacher') router.push('/teacher/enrollment')
+      else if (role === 'teacher') router.push('/teacher/dashboard')
       else router.push('/')
     } else {
-      ElMessage.error(res.message || '登录失败')
+      ElMessage.error(res.message || '用户名或密码错误，请重试')
     }
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '登录失败')
+    const errorMsg = e.response?.data?.message || e.message || '用户名或密码错误，请重试'
+    ElMessage.error(errorMsg)
   } finally {
     loading.value = false
   }

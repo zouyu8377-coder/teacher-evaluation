@@ -121,17 +121,24 @@
     <el-dialog v-model="showImport" title="Excel导入题目" width="500px">
       <el-form>
         <el-form-item label="选择文件">
-          <el-upload ref="uploadRef" :auto-upload="false" :limit="1" accept=".xlsx,.xls">
+          <el-upload
+            ref="uploadRef"
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleFileChange"
+            :on-remove="handleFileRemove"
+            accept=".xlsx,.xls"
+          >
             <el-button>选择Excel文件</el-button>
             <template #tip>
-              <div class="el-upload__tip">请先下载模板，按格式填写后上传</div>
+              <div class="el-upload__tip">支持 .xlsx 格式，一次只能导入一个文件</div>
             </template>
           </el-upload>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showImport = false">取消</el-button>
-        <el-button type="primary" :loading="importing" @click="handleImport">导入</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!selectedFile" @click="handleImport">导入</el-button>
       </template>
     </el-dialog>
   </div>
@@ -150,6 +157,7 @@ const importing = ref(false)
 const editId = ref<number | null>(null)
 const formRef = ref()
 const uploadRef = ref()
+const selectedFile = ref<File | null>(null)
 
 const activities = ref<any[]>([])
 const tableData = ref<any[]>([])
@@ -341,19 +349,34 @@ const downloadTemplate = async () => {
   }
 }
 
+const handleFileChange = (file: any) => {
+  const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+  if (!isExcel) {
+    ElMessage.warning('只能选择 .xlsx 格式的Excel文件')
+    uploadRef.value?.clearFiles()
+    selectedFile.value = null
+    return
+  }
+  selectedFile.value = file.raw
+}
+
+const handleFileRemove = () => {
+  selectedFile.value = null
+}
+
 const handleImport = async () => {
-  const files = (uploadRef.value as any)?.uploadFiles
-  if (!files || files.length === 0) {
+  if (!selectedFile.value) {
     ElMessage.warning('请选择要导入的Excel文件')
     return
   }
-  
+
   importing.value = true
   try {
-    const res = await importQuestions(files[0].raw, query.activityId!)
+    const res = await importQuestions(selectedFile.value, query.activityId!)
     if (res.code === 200) {
       ElMessage.success(`导入成功，共${res.data}道题目`)
       showImport.value = false
+      selectedFile.value = null
       loadData()
     }
   } catch (e: any) {
