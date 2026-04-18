@@ -76,7 +76,7 @@ public class ExamPaperService {
     
     @Transactional
     public void setPaperQuestions(Long paperId, List<Long> questionIds) {
-        paperQuestionRepository.deleteByPaperId(paperId);
+        paperQuestionRepository.deleteByPaperIdAndFlush(paperId);
         
         ExamPaper paper = getById(paperId);
         List<PaperQuestion> pqs = new ArrayList<>();

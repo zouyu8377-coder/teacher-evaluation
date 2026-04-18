@@ -1,5 +1,7 @@
 package com.school.teacherEval.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Evaluation;
 import com.school.teacherEval.entity.PeriodEnrollment;
@@ -13,13 +15,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ActivityService {
-    
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     private final ActivityRepository activityRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final EvaluationRepository evaluationRepository;
@@ -58,6 +63,10 @@ public class ActivityService {
             if (activity.getExamStart() == null) {
                 throw new BusinessException("C级活动考试开始时间不能为空");
             }
+            // 如果没有传入 examEnd，但有 examDurationMinutes，则自动计算
+            if (activity.getExamEnd() == null && activity.getExamDurationMinutes() != null) {
+                activity.setExamEnd(activity.getExamStart().plusMinutes(activity.getExamDurationMinutes()));
+            }
             if (activity.getExamEnd() == null) {
                 throw new BusinessException("C级活动考试结束时间不能为空");
             }
@@ -80,8 +89,13 @@ public class ActivityService {
             }
         }
 
+        // 默认评分人为0人
         if (activity.getReviewerCount() == null) {
-            activity.setReviewerCount(2);
+            activity.setReviewerCount(0);
+        }
+        // 默认状态为草稿
+        if (activity.getStatus() == null) {
+            activity.setStatus(Activity.Status.draft);
         }
         // C级固定为考试，其他级别固定为文档
         activity.setHasExam(activity.getLevel() == Activity.Level.C);
@@ -101,14 +115,44 @@ public class ActivityService {
         if (updated.getDescription() != null) activity.setDescription(updated.getDescription());
         if (updated.getMaxParticipants() != null) activity.setMaxParticipants(updated.getMaxParticipants());
         if (updated.getStatus() != null) {
+            // 检查切换到"进行中"状态时的校验
+            if (updated.getStatus() == Activity.Status.active && activity.getStatus() != Activity.Status.active) {
+                // 校验评分人数量
+                Integer reviewerCount = activity.getReviewerCount();
+                if (reviewerCount == null || reviewerCount == 0) {
+                    throw new BusinessException("评分人数量不能为0，请先添加评分人");
+                }
+                // 校验评分人ID列表是否为空
+                String reviewerIds = activity.getReviewerIds();
+                if (reviewerIds == null || reviewerIds.isEmpty() || "[]".equals(reviewerIds)) {
+                    throw new BusinessException("评分人ID列表为空，请先添加评分人");
+                }
+                // 解析并校验实际评分人数量
+                try {
+                    List<Long> reviewerIdList = objectMapper.readValue(reviewerIds, new TypeReference<List<Long>>() {});
+                    if (reviewerIdList == null || reviewerIdList.isEmpty()) {
+                        throw new BusinessException("评分人ID列表为空，请先添加评分人");
+                    }
+                } catch (Exception e) {
+                    throw new BusinessException("评分人ID列表解析失败，请检查数据");
+                }
+                // C级活动校验试卷挂载
+                if (activity.getLevel() == Activity.Level.C && (activity.getExamPaperId() == null || activity.getExamPaperId() == 0L)) {
+                    throw new BusinessException("C级活动必须先挂载试卷才能启用");
+                }
+            }
             activity.setStatus(updated.getStatus());
         }
         if (updated.getEnrollmentStart() != null) activity.setEnrollmentStart(updated.getEnrollmentStart());
         if (updated.getEnrollmentEnd() != null) activity.setEnrollmentEnd(updated.getEnrollmentEnd());
         if (updated.getExamStart() != null) activity.setExamStart(updated.getExamStart());
-        // 计算考试结束时间
-        if (updated.getExamStart() != null && updated.getExamDurationMinutes() != null) {
-            activity.setExamEnd(updated.getExamStart().plusMinutes(updated.getExamDurationMinutes()));
+        // 更新考试时长
+        if (updated.getExamDurationMinutes() != null) {
+            activity.setExamDurationMinutes(updated.getExamDurationMinutes());
+        }
+        // 计算考试结束时间（只要 examStart 或 examDurationMinutes 有传入就重新计算）
+        if (activity.getExamStart() != null && activity.getExamDurationMinutes() != null) {
+            activity.setExamEnd(activity.getExamStart().plusMinutes(activity.getExamDurationMinutes()));
         }
         if (updated.getMaterialStart() != null) activity.setMaterialStart(updated.getMaterialStart());
         if (updated.getMaterialEnd() != null) activity.setMaterialEnd(updated.getMaterialEnd());
@@ -119,6 +163,10 @@ public class ActivityService {
         if (activity.getLevel() == Activity.Level.C) {
             if (activity.getExamStart() == null) {
                 throw new BusinessException("C级活动考试开始时间不能为空");
+            }
+            // 如果没有传入 examEnd，但有 examDurationMinutes，则自动计算
+            if (activity.getExamEnd() == null && activity.getExamDurationMinutes() != null) {
+                activity.setExamEnd(activity.getExamStart().plusMinutes(activity.getExamDurationMinutes()));
             }
             if (activity.getExamEnd() == null) {
                 throw new BusinessException("C级活动考试结束时间不能为空");
@@ -148,7 +196,7 @@ public class ActivityService {
                 activity.setReviewerCount(newVal);
             }
         } else if (activity.getReviewerCount() == null) {
-            activity.setReviewerCount(2);
+            activity.setReviewerCount(0);
         }
         if (updated.getReviewerIds() != null) activity.setReviewerIds(updated.getReviewerIds());
         if (updated.getExamPaperId() != null) activity.setExamPaperId(updated.getExamPaperId());

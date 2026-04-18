@@ -1,5 +1,7 @@
 package com.school.teacherEval.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.teacherEval.dto.ApiResponse;
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.PeriodEnrollment;
@@ -16,10 +18,13 @@ import com.school.teacherEval.service.DocumentService;
 import com.school.teacherEval.repository.EvaluationRepository;
 import com.school.teacherEval.repository.DocumentRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
@@ -27,6 +32,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/activities")
+@Slf4j
 @RequiredArgsConstructor
 public class ActivityController {
 
@@ -129,7 +135,7 @@ public class ActivityController {
                 if (publishedEval.isPresent()) {
                     Evaluation eval = publishedEval.get();
                     map.put("scorePublished", true);
-                    map.put("finalScore", eval.getScore());
+                    map.put("finalScore", eval.getFinalScore());
                     map.put("comment", eval.getComment());
                 } else {
                     map.put("scorePublished", false);
@@ -176,6 +182,71 @@ public class ActivityController {
             @RequestParam Integer reviewerCount,
             @RequestParam String reviewerIds) {
         return ApiResponse.success(activityService.updateReviewerConfig(id, reviewerCount, reviewerIds));
+    }
+
+    @GetMapping(value = "/{id}/review-progress", produces = "application/json;charset=UTF-8")
+    @PreAuthorize("hasRole('admin')")
+    public ApiResponse<Map<String, Object>> getReviewProgress(@PathVariable Long id) {
+        Activity activity = activityService.getById(id);
+        List<User> enrolledTeachers = enrollmentService.getEnrolledTeachersByActivity(id);
+        int totalTeachers = enrolledTeachers.size();
+        int totalRequired = totalTeachers * (activity.getReviewerCount() != null ? activity.getReviewerCount() : 0);
+
+        // 解析评分人ID列表
+        List<Long> reviewerIdList = new ArrayList<>();
+        if (activity.getReviewerIds() != null && !activity.getReviewerIds().isEmpty()) {
+            try {
+                reviewerIdList = new ObjectMapper().readValue(activity.getReviewerIds(),
+                    new TypeReference<List<Long>>() {});
+            } catch (Exception e) {
+                log.error("解析reviewerIds失败", e);
+            }
+        }
+
+        // 获取每个评分人的批阅数量
+        List<Map<String, Object>> reviewerStats = new ArrayList<>();
+        for (Long reviewerId : reviewerIdList) {
+            User evaluator = userService.getUserById(reviewerId);
+            if (evaluator != null) {
+                long completedCount = evaluationRepository.countByActivityIdAndEvaluatorId(id, reviewerId);
+                Map<String, Object> stat = new HashMap<>();
+                stat.put("id", reviewerId);
+                stat.put("realName", evaluator.getRealName());
+                stat.put("completedCount", completedCount);
+                stat.put("totalRequired", totalTeachers);
+                reviewerStats.add(stat);
+            }
+        }
+
+        // 计算总完成数
+        long totalCompleted = reviewerStats.stream()
+            .mapToLong(s -> (Long) s.get("completedCount"))
+            .sum();
+
+        // 判断评分状态
+        String reviewStatus;
+        if (activity.getScoresPublished() != null && activity.getScoresPublished()) {
+            reviewStatus = "已发布";
+        } else if (totalRequired > 0 && totalCompleted >= totalRequired) {
+            reviewStatus = "评分完成";
+        } else if (totalCompleted > 0) {
+            reviewStatus = "评分中";
+        } else if (totalRequired > 0) {
+            reviewStatus = "待评分";
+        } else {
+            reviewStatus = "未配置";
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("enrolledCount", totalTeachers);
+        result.put("reviewerCount", activity.getReviewerCount());
+        result.put("reviewerStats", reviewerStats);
+        result.put("totalCompleted", totalCompleted);
+        result.put("totalRequired", totalRequired);
+        result.put("reviewStatus", reviewStatus);
+        result.put("scoresPublished", activity.getScoresPublished());
+
+        return ApiResponse.success(result);
     }
     
     @GetMapping(value = "/{id}/can-enroll", produces = "application/json;charset=UTF-8")
@@ -303,11 +374,21 @@ public class ActivityController {
                     if (examRecord != null) {
                         map.put("examRecordId", examRecord.getId());
                         if (examRecord.getSubmittedAt() != null) {
+                            // 已提交：显示提交时间
                             map.put("submittedAt", examRecord.getSubmittedAt());
-                            map.put("submissionStatus", examRecord.getStatus().name());
+                            map.put("submissionStatus", "submitted");
                         } else {
-                            map.put("submittedAt", null);
-                            map.put("submissionStatus", examRecord.getStatus().name());
+                            // 已开始答题但未提交：判断考试是否已结束
+                            LocalDateTime now = LocalDateTime.now();
+                            if (activity.getExamEnd() != null && now.isAfter(activity.getExamEnd())) {
+                                // 考试已结束，未提交
+                                map.put("submittedAt", null);
+                                map.put("submissionStatus", "not_submitted");
+                            } else {
+                                // 考试进行中
+                                map.put("submittedAt", null);
+                                map.put("submissionStatus", examRecord.getStatus().name());
+                            }
                         }
                     } else {
                         map.put("examRecordId", null);

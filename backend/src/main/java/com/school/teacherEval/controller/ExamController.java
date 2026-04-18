@@ -37,10 +37,9 @@ public class ExamController {
     @Operation(summary = "获取题库列表")
     public ApiResponse<Page<ExamQuestion>> getQuestions(
             @RequestParam(required = false) ExamQuestion.QuestionType type,
-            @RequestParam(required = false) Boolean status,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ApiResponse.success(questionService.getQuestions(type, status, page, size));
+        return ApiResponse.success(questionService.getQuestions(type, page, size));
     }
     
     @GetMapping("/questions/{id}")

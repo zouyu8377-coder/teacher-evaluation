@@ -45,7 +45,6 @@ export interface ExamRecord {
 export const getQuestions = (params: {
   periodId: number
   type?: 'single' | 'multiple'
-  status?: boolean
   page?: number
   size?: number
 }) => {

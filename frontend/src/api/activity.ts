@@ -75,6 +75,10 @@ export const getActivityEnrollments = (activityId: number) => {
   return api.get(`/activities/${activityId}/enrollments`)
 }
 
+export const getReviewProgress = (activityId: number) => {
+  return api.get(`/activities/${activityId}/review-progress`)
+}
+
 export const enrollActivity = (activityId: number) => {
   return api.post(`/activities/${activityId}/enroll`)
 }

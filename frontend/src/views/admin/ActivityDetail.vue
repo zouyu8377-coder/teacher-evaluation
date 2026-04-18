@@ -81,12 +81,12 @@
         </div>
       </div>
 
-      <!-- 时间信息 -->
+      <!-- 时间地点信息 -->
       <div class="time-card">
         <div class="section-header">
           <h3 class="section-title">
             <span class="material-symbols-outlined">schedule</span>
-            时间安排
+            时间地点安排
           </h3>
           <el-button type="primary" size="small" @click="openEditDialog">
             <span class="material-symbols-outlined" style="font-size: 16px; margin-right: 4px;">edit</span>
@@ -106,15 +106,19 @@
             <span class="time-label">上传资料</span>
             <span class="time-value">{{ formatDateTime(activity.materialStart) }} ~ {{ formatDateTime(activity.materialEnd) }}</span>
           </div>
+          <div class="time-item" v-if="activity.location">
+            <span class="time-label">考核地点</span>
+            <span class="time-value">{{ activity.location }}</span>
+          </div>
         </div>
       </div>
 
-      <!-- 评分人配置 -->
+      <!-- 评分配置 -->
       <div class="reviewer-card">
         <div class="section-header">
           <h3 class="section-title">
             <span class="material-symbols-outlined">group</span>
-            评分人配置
+            评分配置
           </h3>
           <el-button type="primary" size="small" @click="openReviewerDialog">
             <span class="material-symbols-outlined" style="font-size: 16px; margin-right: 4px;">settings</span>
@@ -122,11 +126,39 @@
           </el-button>
         </div>
         <div class="reviewer-info">
-          <el-tag type="info">评分人数：{{ selectedReviewerNames.length }} 人</el-tag>
+          <el-tag type="info">参与教师：{{ reviewProgress.enrolledCount || 0 }} 人</el-tag>
+          <el-tag type="info" style="margin-left: 8px;">评分人数：{{ reviewProgress.reviewerCount || 0 }} 人</el-tag>
           <span v-if="selectedReviewerNames.length > 0" style="margin-left: 12px; color: #64748b;">
             {{ selectedReviewerNames.join('、') }}
           </span>
-          <span v-else style="margin-left: 12px; color: #999;">点击配置设置评分人</span>
+        </div>
+        <!-- 评分进度 -->
+        <div v-if="reviewProgress.reviewerStats && reviewProgress.reviewerStats.length > 0" class="reviewer-stats">
+          <el-divider />
+          <div class="progress-item" v-for="stat in reviewProgress.reviewerStats" :key="stat.id">
+            <span class="reviewer-name" style="display: inline-block; width: 80px;">{{ stat.realName }}</span>
+            <el-progress
+              :percentage="stat.totalRequired > 0 ? Math.round(stat.completedCount / stat.totalRequired * 100) : 0"
+              :stroke-width="10"
+              :format="() => stat.completedCount + '/' + stat.totalRequired"
+              style="width: 180px; display: inline-block; vertical-align: middle; margin-right: 12px;">
+            </el-progress>
+            <el-tag :type="stat.completedCount >= stat.totalRequired ? 'success' : 'warning'" size="small">
+              {{ stat.completedCount >= stat.totalRequired ? '已完成' : '进行中' }}
+            </el-tag>
+          </div>
+          <el-divider />
+          <div class="review-status">
+            <el-tag v-if="reviewProgress.reviewStatus === '未配置'" type="info">待配置评分人</el-tag>
+            <el-tag v-else-if="reviewProgress.reviewStatus === '待评分'" type="warning">待评分</el-tag>
+            <el-tag v-else-if="reviewProgress.reviewStatus === '评分中'" type="warning">评分中</el-tag>
+            <el-tag v-else-if="reviewProgress.reviewStatus === '评分完成' && !reviewProgress.scoresPublished" type="success">评分完成</el-tag>
+            <el-tag v-else-if="reviewProgress.scoresPublished" type="success">成绩已发布</el-tag>
+          </div>
+          <!-- 评分完成且成绩未发布时显示发布按钮 -->
+          <div v-if="reviewProgress.reviewStatus === '评分完成' && !reviewProgress.scoresPublished" style="margin-top: 12px;">
+            <el-button type="primary" @click="handlePublishScores">发布成绩</el-button>
+          </div>
         </div>
       </div>
 
@@ -312,6 +344,9 @@
           <el-input-number v-model="editForm.maxParticipants" :min="0" :max="10000" placeholder="0表示不限制" />
           <span style="margin-left: 10px; color: #999;">0表示不限制</span>
         </el-form-item>
+        <el-form-item label="考核地点">
+          <el-input v-model="editForm.location" placeholder="非必填" />
+        </el-form-item>
         <el-form-item label="说明">
           <el-input v-model="editForm.description" type="textarea" :rows="3" />
         </el-form-item>
@@ -352,7 +387,8 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getActivityById, getActivityEnrollments, updateActivity, updateReviewerConfig } from '@/api/activity'
+import { getActivityById, getActivityEnrollments, updateActivity, updateReviewerConfig, getReviewProgress } from '@/api/activity'
+import { publishEvaluationScores } from '@/api/evaluation'
 import { getEvaluators } from '@/api/user'
 import { getPapersByPeriod } from '@/api/exam'
 import { getMaterialList, uploadMaterial, deleteMaterial, downloadMaterial as downloadApi } from '@/api/learningMaterial'
@@ -414,6 +450,7 @@ const editForm = ref({
   examDurationMinutes: 60,
   materialStart: '',
   materialEnd: '',
+  location: '',
   description: ''
 })
 const editRules = {
@@ -433,6 +470,43 @@ const evaluators = ref<any[]>([])
 const reviewerForm = ref({
   selectedReviewers: [] as number[]
 })
+
+// 评分进度相关
+const reviewProgress = ref<any>({
+  enrolledCount: 0,
+  reviewerCount: 0,
+  reviewerStats: [],
+  totalCompleted: 0,
+  totalRequired: 0,
+  reviewStatus: '未开始',
+  scoresPublished: false
+})
+
+const loadReviewProgress = async () => {
+  if (!activity.value) return
+  try {
+    const res = await getReviewProgress(activity.value.id)
+    if (res.code === 200) {
+      reviewProgress.value = res.data
+    }
+  } catch (e) {
+    console.error('获取评分进度失败', e)
+  }
+}
+
+const handlePublishScores = async () => {
+  if (!activity.value) return
+  await ElMessageBox.confirm('确定要公布这次考核中所有已打分的成绩吗？公布后教师可查看。', '提示', { type: 'warning' })
+  try {
+    const res = await publishEvaluationScores(activity.value.id)
+    if (res.code === 200) {
+      ElMessage.success('成绩已公布')
+      loadData()
+    }
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.message || '发布失败')
+  }
+}
 
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
@@ -467,6 +541,8 @@ const loadData = async () => {
       loadEnrollments(activityId as string)
       // 加载学习资料
       loadMaterials()
+      // 加载评分进度
+      loadReviewProgress()
       // 如果是C级考核，加载试卷列表
       if (res.data.level === 'C') {
         loadPapers()
@@ -530,6 +606,7 @@ const openEditDialog = () => {
     examDurationMinutes: activity.value.examDurationMinutes || 60,
     materialStart: activity.value.materialStart || '',
     materialEnd: activity.value.materialEnd || '',
+    location: activity.value.location || '',
     description: activity.value.description || ''
   }
   showEditDialog.value = true

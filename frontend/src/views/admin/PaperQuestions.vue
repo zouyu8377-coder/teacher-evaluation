@@ -180,7 +180,6 @@ const loadQuestions = async () => {
       activityId: questionQuery.value.activityId,
       type: questionQuery.value.type || undefined,
       difficulty: questionQuery.value.difficulty || undefined,
-      status: true,
       page: questionQuery.value.page,
       size: questionQuery.value.size
     })

@@ -38,6 +38,12 @@
           <el-table-column prop="startDate" label="开始日期" width="120" />
           <el-table-column prop="endDate" label="结束日期" width="120" />
           <el-table-column prop="enrolledCount" label="报名人数" width="100" align="center" />
+          <el-table-column label="成绩公布" width="100">
+            <template #default="{ row }">
+              <el-tag v-if="row.scoresPublished" type="success">已公布</el-tag>
+              <el-tag v-else type="info">未公布</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column label="操作" width="120">
             <template #default="{ row }">
               <el-button type="primary" link @click="selectActivity(row)">
@@ -69,7 +75,7 @@
           <el-table-column prop="department" label="所属教研组" />
           <el-table-column label="提交时间" width="180">
             <template #default="{ row }">
-              <span v-if="row.submittedAt">{{ formatDateTime(row.submittedAt) }}</span>
+              <span v-if="row.submissionStatus === 'submitted'">{{ formatDateTime(row.submittedAt) }}</span>
               <el-tag v-else type="info" size="small">未提交</el-tag>
             </template>
           </el-table-column>
@@ -83,7 +89,7 @@
             <template #default="{ row }">
               <div class="action-buttons">
                 <template v-if="selectedActivity.level === 'C'">
-                  <el-button type="primary" link @click="viewExam(row)" v-if="row.submissionStatus === 'submitted'">查看答卷</el-button>
+                  <el-button type="primary" link @click="viewExam(row)" v-if="row.examRecordId && row.submissionStatus !== 'not_started'">查看答卷</el-button>
                 </template>
                 <template v-else>
                   <el-button type="primary" link @click="viewDocuments(row)" v-if="row.submittedAt">查看文档</el-button>
@@ -97,8 +103,14 @@
 
         <el-divider />
 
-        <div class="actions">
-          <el-button type="primary" @click="publishScores" :loading="publishLoading">公布成绩</el-button>
+        <div class="actions" v-if="selectedActivity && !selectedActivity.scoresPublished">
+          <el-button type="primary" @click="publishScores" :loading="publishLoading" :disabled="reviewStatus !== '评分完成'">公布成绩</el-button>
+          <span v-if="reviewStatus && reviewStatus !== '评分完成'" style="margin-left: 12px; color: #999;">
+            {{ reviewStatus === '待评分' || reviewStatus === '未配置' ? '评分尚未开始' : '等待所有评分人完成评分' }}
+          </span>
+        </div>
+        <div class="actions" v-else-if="selectedActivity && selectedActivity.scoresPublished">
+          <el-tag type="success">成绩已公布</el-tag>
         </div>
       </template>
     </el-card>
@@ -149,7 +161,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getActiveActivities, getActivityEnrollments } from '@/api/activity'
+import { getActiveActivities, getActivityEnrollments, getReviewProgress } from '@/api/activity'
 import { getExamRecordDetail } from '@/api/exam'
 import { getTeacherActivityEvaluations, publishEvaluationScores } from '@/api/evaluation'
 
@@ -163,6 +175,7 @@ const selectedActivity = ref<any>(null)
 const levelFilter = ref<string>('')
 const showExamDetail = ref(false)
 const examDetailRecord = ref<any>(null)
+const reviewStatus = ref<string>('')
 const examDetailQuestions = ref<any[]>([])
 
 const filteredActivities = computed(() => {
@@ -254,6 +267,12 @@ const selectActivity = async (activity: any) => {
       }
       enrolledTeachers.value = teachers
     }
+
+    // 获取评分进度
+    const progressRes = await getReviewProgress(activity.id)
+    if (progressRes.code === 200) {
+      reviewStatus.value = progressRes.data.reviewStatus
+    }
   } finally {
     teacherLoading.value = false
   }
@@ -292,6 +311,12 @@ const publishScores = async () => {
     return
   }
 
+  // 检查是否已公布
+  if (selectedActivity.value.scoresPublished) {
+    ElMessage.warning('该考核的成绩已公布，无法重复公布')
+    return
+  }
+
   await ElMessageBox.confirm('确定要公布这次考核中所有已打分的成绩吗？公布后教师可查看。', '提示', { type: 'warning' })
 
   publishLoading.value = true
@@ -299,6 +324,8 @@ const publishScores = async () => {
     const res = await publishEvaluationScores(selectedActivity.value.id)
     if (res.code === 200) {
       ElMessage.success('成绩已公布')
+      // 更新本地状态
+      selectedActivity.value.scoresPublished = true
     }
   } finally {
     publishLoading.value = false

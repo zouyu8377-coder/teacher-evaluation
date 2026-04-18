@@ -24,12 +24,6 @@
             <el-option label="多选题" value="multiple" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="query.status" placeholder="全部" clearable filterable @change="loadData" style="width: 100px;">
-            <el-option label="启用" :value="true" />
-            <el-option label="禁用" :value="false" />
-          </el-select>
-        </el-form-item>
       </el-form>
 
       <el-table :data="tableData" stripe v-loading="loading">
@@ -46,13 +40,6 @@
         <el-table-column prop="difficulty" label="难度" width="60">
           <template #default="{ row }">
             <el-rate v-model="row.difficulty" disabled :max="5" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="60">
-          <template #default="{ row }">
-            <el-tag :type="row.status ? 'success' : 'info'">
-              {{ row.status ? '启用' : '禁用' }}
-            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150">
@@ -107,9 +94,6 @@
         </el-form-item>
         <el-form-item label="解析">
           <el-input v-model="form.explanation" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="form.status" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -166,7 +150,6 @@ const total = ref(0)
 const query = reactive({
   activityId: null as number | null,
   type: '' as '' | 'single' | 'multiple',
-  status: null as boolean | null,
   page: 1,
   size: 10
 })
@@ -184,8 +167,7 @@ const form = reactive({
   correctAnswer: '',
   score: 5,
   difficulty: 1,
-  explanation: '',
-  status: true
+  explanation: ''
 })
 
 const rules = {
@@ -212,7 +194,6 @@ const loadData = async () => {
     const res = await getQuestions({
       activityId: query.activityId,
       type: query.type || undefined,
-      status: query.status ?? undefined,
       page: query.page,
       size: query.size
     })
@@ -240,8 +221,7 @@ const handleAdd = () => {
     correctAnswer: '',
     score: 5,
     difficulty: 1,
-    explanation: '',
-    status: true
+    explanation: ''
   })
   dialogVisible.value = true
 }
@@ -267,8 +247,7 @@ const handleEdit = (row: any) => {
     correctAnswer: row.correctAnswer,
     score: row.score,
     difficulty: row.difficulty,
-    explanation: row.explanation,
-    status: row.status
+    explanation: row.explanation
   })
   dialogVisible.value = true
 }
@@ -300,8 +279,7 @@ const handleSubmit = async () => {
     correctAnswer: form.correctAnswer.toUpperCase(),
     score: form.score,
     difficulty: form.difficulty,
-    explanation: form.explanation,
-    status: form.status
+    explanation: form.explanation
   }
   
   loading.value = true

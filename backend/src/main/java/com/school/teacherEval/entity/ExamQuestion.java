@@ -7,8 +7,7 @@ import java.time.LocalDateTime;
 @Data
 @Entity
 @Table(name = "exam_questions", indexes = {
-    @Index(name = "idx_type", columnList = "question_type"),
-    @Index(name = "idx_status", columnList = "status")
+    @Index(name = "idx_type", columnList = "question_type")
 })
 public class ExamQuestion {
     
@@ -37,10 +36,7 @@ public class ExamQuestion {
     
     @Column(nullable = false)
     private Integer difficulty = 1;
-    
-    @Column(nullable = false)
-    private Boolean status = true;
-    
+
     @Column(name = "created_by", nullable = false)
     private Long createdBy;
     

@@ -1,7 +1,9 @@
 package com.school.teacherEval.service;
 
+import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Evaluation;
 import com.school.teacherEval.exception.BusinessException;
+import com.school.teacherEval.repository.ActivityRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
 import com.school.teacherEval.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -25,6 +28,7 @@ public class EvaluationService {
     private final EvaluationRepository evaluationRepository;
     private final UserRepository userRepository;
     private final ActivityService activityService;
+    private final ActivityRepository activityRepository;
     
     public Page<Evaluation> getEvaluations(Long activityId, Long teacherId, int page, int size) {
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -136,6 +140,22 @@ public class EvaluationService {
     
     @Transactional
     public int publishScores(Long activityId, Long teacherId) {
+        // 获取活动信息并校验
+        Activity activity = activityService.getById(activityId);
+
+        // 校验4：考试时间结束前不得公布成绩
+        if (activity.getExamEnd() != null) {
+            LocalDateTime now = LocalDateTime.now();
+            if (now.isBefore(activity.getExamEnd())) {
+                throw new BusinessException("考试时间尚未结束，无法公布成绩");
+            }
+        }
+
+        // 校验2：已公布成绩的考核无法再次公布
+        if (activity.getScoresPublished() != null && activity.getScoresPublished()) {
+            throw new BusinessException("该考核活动的成绩已公布，无法重复公布");
+        }
+
         List<Evaluation> evaluations;
         if (teacherId != null) {
             evaluations = evaluationRepository.findByActivityIdAndTeacherId(activityId, teacherId);
@@ -168,6 +188,12 @@ public class EvaluationService {
         }
 
         log.info("发布成绩 - 活动: {}, 教师: {}, 发布数量: {}", activityId, teacherId, count);
+
+        // 更新活动的成绩公布状态
+        activity.setScoresPublished(true);
+        activity.setScoresPublishedAt(LocalDateTime.now());
+        activityRepository.save(activity);
+
         return count;
     }
     

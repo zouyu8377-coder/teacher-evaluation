@@ -56,6 +56,10 @@
               <el-tag type="success">已报名</el-tag>
             </span>
           </div>
+          <div class="info-item" v-if="activity.location">
+            <span class="label">考核地点</span>
+            <span class="value">{{ activity.location }}</span>
+          </div>
         </div>
       </div>
 

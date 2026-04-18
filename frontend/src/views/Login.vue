@@ -42,6 +42,10 @@
         <p>考核员: evaluator1 / eval123</p>
         <p>教师: teacher1 / teacher123</p>
       </div>
+
+      <div class="version-info">
+        v{{ version }}
+      </div>
     </div>
   </div>
 </template>
@@ -53,7 +57,10 @@ import { ElMessage } from 'element-plus'
 import { login } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 
+declare const __APP_VERSION__: string
+
 const router = useRouter()
+const version = __APP_VERSION__ || '1.0.0'
 const userStore = useUserStore()
 
 const formRef = ref()
@@ -183,6 +190,13 @@ const handleLogin = async () => {
 
 .tips p {
   margin: 4px 0;
+}
+
+.version-info {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 /* Element Plus 样式覆盖 */

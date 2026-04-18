@@ -1,0 +1,120 @@
+version: '3.8'
+
+# 教师评价考核平台 - Docker Compose 部署
+# 使用方法: docker-compose up -d
+
+services:
+  # MySQL 数据库
+  mysql:
+    image: teacher-eval-cn-beijing.cr.volces.com/teacher-eval/mysql:8.0
+    container_name: teacher-eval-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: teacher_eval
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-uroot", "-proot123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - teacher-eval-network
+
+  # Redis 缓存
+  redis:
+    image: teacher-eval-cn-beijing.cr.volces.com/teacher-eval/redis:7-alpine
+    container_name: teacher-eval-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 5s
+    networks:
+      - teacher-eval-network
+
+  # MinIO 对象存储
+  minio:
+    image: teacher-eval-cn-beijing.cr.volces.com/teacher-eval/minio:RELEASE.2024-01-16T16-07-38Z
+    container_name: teacher-eval-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./data/minio:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - teacher-eval-network
+
+  # Backend 后端服务
+  backend:
+    image: teacher-eval-cn-beijing.cr.volces.com/teacher-eval/teacher-eval-backend:1.005
+    container_name: teacher-eval-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # 使用服务名连接，Docker Compose DNS 会自动解析
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/teacher_eval?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET_NAME: teacher-eval
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks:
+      - teacher-eval-network
+
+  # Frontend 前端服务
+  frontend:
+    image: teacher-eval-cn-beijing.cr.volces.com/teacher-eval/teacher-eval-frontend:1.005
+    container_name: teacher-eval-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - teacher-eval-network
+
+# Docker 网络
+networks:
+  teacher-eval-network:
+    driver: bridge
+
+# 数据卷（持久化存储）
+volumes:
+  mysql-data:
+  minio-data:

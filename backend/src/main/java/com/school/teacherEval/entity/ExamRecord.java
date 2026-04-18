@@ -63,7 +63,7 @@ public class ExamRecord {
     }
     
     public enum Status {
-        not_started, in_progress, submitted
+        not_started, in_progress, not_submitted, submitted
     }
 
     /**

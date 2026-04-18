@@ -22,13 +22,11 @@ public class ExamQuestionService {
     
     private final ExamQuestionRepository questionRepository;
     
-    public Page<ExamQuestion> getQuestions(ExamQuestion.QuestionType type, Boolean status, int page, int size) {
+    public Page<ExamQuestion> getQuestions(ExamQuestion.QuestionType type, int page, int size) {
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "id"));
-        
+
         if (type != null) {
             return questionRepository.findByQuestionType(type, pageable);
-        } else if (status != null) {
-            return questionRepository.findByStatus(status, pageable);
         }
         return questionRepository.findAll(pageable);
     }
@@ -54,7 +52,6 @@ public class ExamQuestionService {
         question.setScore(updated.getScore());
         question.setExplanation(updated.getExplanation());
         question.setDifficulty(updated.getDifficulty());
-        question.setStatus(updated.getStatus());
         return questionRepository.save(question);
     }
     
@@ -62,11 +59,7 @@ public class ExamQuestionService {
     public void delete(Long id) {
         questionRepository.deleteById(id);
     }
-    
-    public long countActive() {
-        return questionRepository.countByStatus(true);
-    }
-    
+
     @Transactional
     public int importFromExcel(MultipartFile file, Long createdBy) {
         try (InputStream is = file.getInputStream();
@@ -100,8 +93,7 @@ public class ExamQuestionService {
                 ExamQuestion question = new ExamQuestion();
                 question.setQuestionType(type);
                 question.setCreatedBy(createdBy);
-                question.setStatus(true);
-                
+
                 question.setQuestionText(getCellValue(row.getCell(0)));
                 
                 List<Map<String, String>> options = new ArrayList<>();

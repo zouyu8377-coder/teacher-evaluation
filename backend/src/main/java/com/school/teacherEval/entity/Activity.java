@@ -74,7 +74,16 @@ public class Activity {
     
     @Column(name = "exam_duration_minutes")
     private Integer examDurationMinutes = 60;
-    
+
+    @Column(name = "location")
+    private String location;
+
+    @Column(name = "scores_published")
+    private Boolean scoresPublished = false;
+
+    @Column(name = "scores_published_at")
+    private LocalDateTime scoresPublishedAt;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
     

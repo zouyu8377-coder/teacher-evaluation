@@ -96,7 +96,7 @@ public class DataInitializer {
                 cActivity.setLevel(Activity.Level.C);
                 cActivity.setDescription("2024学年第一学期C级教师考核");
                 cActivity.setMaxParticipants(50);
-                cActivity.setStatus(Activity.Status.active);
+                cActivity.setStatus(Activity.Status.draft);
                 cActivity.setEnrollmentStart(LocalDateTime.now().minusDays(7));
                 cActivity.setEnrollmentEnd(LocalDateTime.now().plusDays(30));
                 cActivity.setStartDate(LocalDate.of(2024, 9, 1));
@@ -104,14 +104,14 @@ public class DataInitializer {
                 cActivity.setReviewerCount(2);
                 cActivity.setReviewerIds("[1]");  // evaluator1
                 activities.add(cActivity);
-                
+
                 // B2级活动
                 Activity b2Activity = new Activity();
                 b2Activity.setName("2024学年第一学期B2级考核");
                 b2Activity.setLevel(Activity.Level.B2);
                 b2Activity.setDescription("2024学年第一学期B2级教师考核");
                 b2Activity.setMaxParticipants(30);
-                b2Activity.setStatus(Activity.Status.active);
+                b2Activity.setStatus(Activity.Status.draft);
                 b2Activity.setEnrollmentStart(LocalDateTime.now().minusDays(7));
                 b2Activity.setEnrollmentEnd(LocalDateTime.now().plusDays(30));
                 b2Activity.setStartDate(LocalDate.of(2024, 9, 1));
@@ -138,7 +138,6 @@ public class DataInitializer {
                     q.setScore(5);
                     q.setExplanation("教学设计应以学生的学习为中心");
                     q.setDifficulty(1 + (i % 3));
-                    q.setStatus(true);
                     q.setCreatedBy(1L);
                     questions.add(q);
                 }
@@ -153,7 +152,6 @@ public class DataInitializer {
                     q.setScore(10);
                     q.setExplanation("有效的教学策略包括讲授、讨论、演示、练习等多种方法");
                     q.setDifficulty(2);
-                    q.setStatus(true);
                     q.setCreatedBy(1L);
                     questions.add(q);
                 }
@@ -168,7 +166,6 @@ public class DataInitializer {
                     q.setScore(5);
                     q.setExplanation("教学评价应以促进学生发展为目的");
                     q.setDifficulty(2 + (i % 3));
-                    q.setStatus(true);
                     q.setCreatedBy(1L);
                     questions.add(q);
                 }
@@ -183,7 +180,6 @@ public class DataInitializer {
                     q.setScore(10);
                     q.setExplanation("教学反思可以通过多种方式进行");
                     q.setDifficulty(3);
-                    q.setStatus(true);
                     q.setCreatedBy(1L);
                     questions.add(q);
                 }
@@ -221,13 +217,11 @@ public class DataInitializer {
                     
                     List<ExamQuestion> questions = questionRepository.findAll();
                     List<ExamQuestion> cQuestions = questions.stream()
-                        .filter(q -> q.getStatus() != null && q.getStatus() && 
-                            q.getQuestionType() == ExamQuestion.QuestionType.single)
+                        .filter(q -> q.getQuestionType() == ExamQuestion.QuestionType.single)
                         .limit(10)
                         .toList();
                     List<ExamQuestion> cMultiQuestions = questions.stream()
-                        .filter(q -> q.getStatus() != null && q.getStatus() && 
-                            q.getQuestionType() == ExamQuestion.QuestionType.multiple)
+                        .filter(q -> q.getQuestionType() == ExamQuestion.QuestionType.multiple)
                         .limit(5)
                         .toList();
                     

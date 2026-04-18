@@ -49,18 +49,12 @@ public class ExamRecordService {
         }
 
         // 检查是否已有已提交的考试记录
+        // 每个活动每个用户只有一次考试机会，未通过也不得重考
         Optional<ExamRecord> existing = recordRepository.findByTeacherIdAndActivityIdAndStatus(
             teacherId, activityId, ExamRecord.Status.submitted);
         if (existing.isPresent()) {
-            // 检查成绩是否已发布，如果已发布则不允许重新考试
-            List<Evaluation> evals = evaluationRepository.findByTeacherIdAndActivityId(teacherId, activityId);
-            if (!evals.isEmpty()) {
-                Evaluation eval = evals.get(0);
-                if (Boolean.TRUE.equals(eval.getIsPublished())) {
-                    throw new RuntimeException("成绩已发布，无法重新考试");
-                }
-            }
-            // 成绩未发布，才允许重新考试（可能是成绩发布前想重考）
+            // 已提交过考试，不允许再次参加
+            throw new RuntimeException("您已参加过该考试，无法再次参加");
         }
 
         // 检查是否有进行中的考试
@@ -348,24 +342,30 @@ public class ExamRecordService {
         ExamRecord record = getRecordById(recordId);
         ExamPaper paper = paperRepository.findById(record.getPaperId())
             .orElseThrow(() -> new RuntimeException("试卷不存在"));
-        
+
+        // 检查成绩是否已发布，只有发布后才能查看正确答案
+        List<Evaluation> evals = evaluationRepository.findByTeacherIdAndActivityId(
+            record.getTeacherId(), record.getActivityId());
+        boolean isPublished = evals.stream()
+            .anyMatch(e -> Boolean.TRUE.equals(e.getIsPublished()));
+
         List<PaperQuestion> pqs = paperQuestionRepository.findByPaperIdOrderByQuestionOrder(paper.getId());
-        
+
         Map<String, String> answers = new HashMap<>();
         if (record.getAnswers() != null) {
             try {
-                answers = objectMapper.readValue(record.getAnswers(), 
+                answers = objectMapper.readValue(record.getAnswers(),
                     new TypeReference<Map<String, String>>() {});
             } catch (Exception e) {
                 answers = new HashMap<>();
             }
         }
-        
+
         List<Map<String, Object>> questions = new ArrayList<>();
         for (PaperQuestion pq : pqs) {
             ExamQuestion q = pq.getQuestion();
             String userAnswer = answers.get(String.valueOf(pq.getQuestionOrder()));
-            
+
             Map<String, Object> qMap = new HashMap<>();
             qMap.put("order", pq.getQuestionOrder());
             qMap.put("text", q.getQuestionText());
@@ -373,13 +373,17 @@ public class ExamRecordService {
             qMap.put("options", parseOptions(q.getOptions()));
             qMap.put("score", q.getScore());
             qMap.put("userAnswer", userAnswer);
-            qMap.put("correctAnswer", q.getCorrectAnswer());
-            qMap.put("explanation", q.getExplanation());
-            qMap.put("isCorrect", isAnswerCorrect(userAnswer, q.getCorrectAnswer(), q.getQuestionType()));
-            
+
+            // 只有成绩发布后才返回正确答案和解析
+            if (isPublished) {
+                qMap.put("correctAnswer", q.getCorrectAnswer());
+                qMap.put("explanation", q.getExplanation());
+                qMap.put("isCorrect", isAnswerCorrect(userAnswer, q.getCorrectAnswer(), q.getQuestionType()));
+            }
+
             questions.add(qMap);
         }
-        
+
         Map<String, Object> result = new HashMap<>();
         result.put("record", Map.of(
             "id", record.getId(),
@@ -389,10 +393,11 @@ public class ExamRecordService {
             "correctCount", record.getCorrectCount(),
             "wrongCount", record.getWrongCount(),
             "startedAt", record.getStartedAt(),
-            "submittedAt", record.getSubmittedAt()
+            "submittedAt", record.getSubmittedAt(),
+            "isPublished", isPublished
         ));
         result.put("questions", questions);
-        
+
         return result;
     }
     

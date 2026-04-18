@@ -108,8 +108,9 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="考试截止" prop="examEnd">
-              <el-date-picker v-model="form.examEnd" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
+            <el-form-item label="考试时长" prop="examDurationMinutes">
+              <el-input-number v-model="form.examDurationMinutes" :min="10" :max="480" />
+              <span style="margin-left: 10px; color: #999;">分钟</span>
             </el-form-item>
           </el-col>
         </el-row>
@@ -190,6 +191,7 @@ const form = reactive({
   enrollmentStart: '',
   enrollmentEnd: '',
   examStart: '',
+  examDurationMinutes: 60,
   examEnd: '',
   description: ''
 })
@@ -286,6 +288,7 @@ const handleAdd = () => {
     enrollmentStart: '',
     enrollmentEnd: '',
     examStart: '',
+    examDurationMinutes: 60,
     examEnd: '',
     description: ''
   })
@@ -307,6 +310,7 @@ const handleEdit = (row: any) => {
     enrollmentStart: row.enrollmentStart,
     enrollmentEnd: row.enrollmentEnd,
     examStart: row.examStart,
+    examDurationMinutes: row.examDurationMinutes || 60,
     examEnd: row.examEnd,
     description: row.description
   })

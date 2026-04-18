@@ -12,6 +12,8 @@ import java.util.Optional;
 @Repository
 public interface ExamRecordRepository extends JpaRepository<ExamRecord, Long> {
 
+    List<ExamRecord> findByStatus(ExamRecord.Status status);
+
     List<ExamRecord> findByTeacherIdAndActivityId(Long teacherId, Long activityId);
 
     Optional<ExamRecord> findFirstByTeacherIdAndActivityIdOrderByIdDesc(Long teacherId, Long activityId);
