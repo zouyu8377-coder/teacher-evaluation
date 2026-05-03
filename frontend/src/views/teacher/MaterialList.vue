@@ -95,7 +95,7 @@ const loadData = async () => {
 const handleDownload = async (row: any) => {
   try {
     const res = await downloadMaterial(row.id)
-    const url = window.URL.createObjectURL(new Blob([res]))
+    const url = window.URL.createObjectURL(new Blob([res as unknown as BlobPart]))
     const link = document.createElement('a')
     link.href = url
     link.download = row.fileName

@@ -62,10 +62,10 @@
             <el-button type="primary" link @click="viewDetail(row)" v-if="row.status === 'submitted'">
               查看详情
             </el-button>
-            <el-button type="warning" link @click="openAdjust(row)" v-if="row.status === 'submitted'">
+            <el-button type="warning" link @click="openAdjust(row)" v-if="isAdmin && row.status === 'submitted'">
               调整分数
             </el-button>
-            <el-button type="success" link @click="publishScore(row)" v-if="row.status === 'submitted' && !row.isPublished">
+            <el-button type="success" link @click="publishScore(row)" v-if="isAdmin && row.status === 'submitted' && !row.isPublished">
               公布成绩
             </el-button>
             <el-tag type="success" v-if="row.isPublished">已公布</el-tag>
@@ -146,19 +146,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 import { getExamRecordsByActivity, getExamRecordDetail, adjustScore } from '@/api/exam'
 import { getActivityList, getActivitiesByPeriod } from '@/api/activity'
 import { publishEvaluationScores } from '@/api/evaluation'
 
 const route = useRoute()
+const userStore = useUserStore()
 const loading = ref(false)
 const showDetail = ref(false)
 const showAdjust = ref(false)
 const adjusting = ref(false)
 const singleMode = ref(false)
+const isAdmin = computed(() => userStore.user?.role === 'admin')
 
 const activities = ref<any[]>([])
 const tableData = ref<any[]>([])
@@ -186,8 +189,8 @@ const loadData = async () => {
   try {
     const res = await getExamRecordsByActivity(query.activityId, query.page, query.size)
     if (res.code === 200) {
-      tableData.value = res.data.content
-      total.value = res.data.totalElements
+      tableData.value = res.data.records
+      total.value = res.data.total
     }
   } finally {
     loading.value = false
@@ -204,7 +207,7 @@ const loadSingleRecord = async () => {
     try {
       const res = await getExamRecordsByActivity(activityId, 1, 20)
       if (res.code === 200) {
-        const record = res.data.content.find((r: any) => r.teacherId === teacherId)
+        const record = res.data.records.find((r: any) => r.teacherId === teacherId)
         if (record) {
           await viewDetail(record)
         }

@@ -92,7 +92,7 @@
               <template v-if="dashboard?.historyRecords?.length">
                 <div
                   v-for="record in dashboard.historyRecords"
-                  :key="record.activityId + record.completedAt"
+                  :key="record.activityId + (record.completedAt ?? '')"
                   class="history-item"
                   :class="{ passed: record.isPassed, failed: !record.isPassed }"
                 >
@@ -187,11 +187,11 @@
                   </div>
                   <!-- 显示时间窗口 -->
                   <div class="time-window">
-                    <span class="time-label">{{ enrollment.hasExam ? '考试时间' : '上传窗口' }}：</span>
+                    <span class="time-label">{{ enrollment.level === 'C' ? '考试时间' : '上传窗口' }}：</span>
                     <span class="time-value">{{ getWindowText(enrollment) }}</span>
                   </div>
 
-                  <div v-if="enrollment.hasExam" class="exam-status">
+                  <div v-if="enrollment.level === 'C'" class="exam-status">
                     <!-- 未参加考试或未开始 -->
                     <template v-if="!enrollment.examStatus || enrollment.examStatus === 'not_started'">
                       <template v-if="isInWindow(enrollment)">
@@ -224,6 +224,12 @@
                         <el-tag type="danger" size="small">未通过</el-tag>
                         <span class="score-display">得分: {{ enrollment.finalScore }}</span>
                       </template>
+                      <span v-if="enrollment.correctCount !== undefined && enrollment.wrongCount !== undefined" class="exam-stats">
+                        对{{ enrollment.correctCount }}题 / 错{{ enrollment.wrongCount }}题
+                      </span>
+                      <el-button type="primary" size="small" @click="viewExamDetail(enrollment)" style="margin-left: 8px;">
+                        查看答题详情
+                      </el-button>
                     </template>
                   </div>
                   <!-- 非C级：文档上传入口 -->
@@ -319,7 +325,7 @@ const formatDateTime = (dateStr: string | null | undefined) => {
 // 检查当前时间是否在考试/上传窗口期内
 const isInWindow = (enrollment: EnrollmentInfo) => {
   const now = new Date()
-  if (enrollment.hasExam) {
+  if (enrollment.level === 'C') {
     const start = enrollment.examStartTime ? new Date(enrollment.examStartTime) : null
     const end = enrollment.examEndTime ? new Date(enrollment.examEndTime) : null
     if (start && now < start) return false
@@ -336,7 +342,7 @@ const isInWindow = (enrollment: EnrollmentInfo) => {
 
 // 获取时间窗口描述
 const getWindowText = (enrollment: EnrollmentInfo) => {
-  if (enrollment.hasExam) {
+  if (enrollment.level === 'C') {
     return `${formatDateTime(enrollment.examStartTime)} ~ ${formatDateTime(enrollment.examEndTime)}`
   } else {
     return `${formatDateTime(enrollment.materialStartTime)} ~ ${formatDateTime(enrollment.materialEndTime)}`
@@ -381,6 +387,14 @@ const startExam = (enrollment: EnrollmentInfo) => {
 
 const continueExam = (enrollment: EnrollmentInfo) => {
   router.push(`/teacher/exam?activityId=${enrollment.activityId}&recordId=${enrollment.examRecordId}`)
+}
+
+const viewExamDetail = (enrollment: EnrollmentInfo) => {
+  router.push(`/teacher/exam?recordId=${enrollment.examRecordId}`)
+}
+
+const goToUpload = (enrollment: EnrollmentInfo) => {
+  router.push(`/teacher/materials?activityId=${enrollment.activityId}`)
 }
 </script>
 
@@ -705,6 +719,14 @@ const continueExam = (enrollment: EnrollmentInfo) => {
 .exam-hint {
   font-size: 0.75rem;
   color: #94a3b8;
+}
+
+.exam-stats {
+  font-size: 0.75rem;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 
 /* 历史记录 */

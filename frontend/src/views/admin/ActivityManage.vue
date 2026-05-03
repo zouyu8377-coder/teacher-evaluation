@@ -165,6 +165,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const router = useRouter()
 import { getActivityList, createActivity, updateActivity, deleteActivity, getEnrollmentInfo, updateReviewerConfig } from '@/api/activity'
 import { getEvaluators } from '@/api/user'
+import type { Activity } from '@/api/types'
 
 const loading = ref(false)
 const dialogVisible = ref(false)
@@ -184,7 +185,7 @@ const filteredActivities = computed(() => {
 
 const form = reactive({
   name: '',
-  level: '',
+  level: '' as Activity['level'],
   maxParticipants: 0,
   reviewerCount: 2,
   selectedReviewers: [] as number[],
@@ -231,34 +232,39 @@ const loadData = async () => {
   try {
     const res = await getActivityList()
     if (res.code === 200) {
-      const activities = res.data || []
+      const activities = (res.data || []) as any[]
       const now = new Date()
 
+      // 先计算本地状态，再并发请求报名详情
       for (const activity of activities) {
-        // 计算报名状态
         const enrollmentStart = activity.enrollmentStart ? new Date(activity.enrollmentStart) : null
         const enrollmentEnd = activity.enrollmentEnd ? new Date(activity.enrollmentEnd) : null
 
         if (enrollmentStart && now < enrollmentStart) {
-          activity.enrollmentStatus = 'pending' // 未到报名时间
+          activity.enrollmentStatus = 'pending'
         } else if (enrollmentEnd && now > enrollmentEnd) {
-          activity.enrollmentStatus = 'ended' // 已过报名时间
+          activity.enrollmentStatus = 'ended'
         } else {
-          activity.enrollmentStatus = 'active' // 报名时间段内
-        }
-
-        try {
-          const infoRes = await getEnrollmentInfo(activity.id)
-          activity.enrolledCount = infoRes.data.enrolledCount
-          activity.remaining = infoRes.data.remaining
-        } catch {
-          activity.enrolledCount = 0
-          activity.remaining = -1
+          activity.enrollmentStatus = 'active'
         }
       }
 
+      // 并发加载所有活动的报名详情
+      await Promise.all(
+        activities.map(async (activity: any) => {
+          try {
+            const infoRes = await getEnrollmentInfo(activity.id)
+            activity.enrolledCount = infoRes.data.enrolledCount
+            activity.remaining = infoRes.data.remaining
+          } catch {
+            activity.enrolledCount = 0
+            activity.remaining = -1
+          }
+        })
+      )
+
       // 排序：按报名开始时间从旧到新
-      activities.sort((a, b) => {
+      activities.sort((a: any, b: any) => {
         const aTime = a.enrollmentStart ? new Date(a.enrollmentStart).getTime() : 0
         const bTime = b.enrollmentStart ? new Date(b.enrollmentStart).getTime() : 0
         return aTime - bTime
@@ -299,6 +305,19 @@ const goToDetail = (row: any) => {
   router.push(`/admin/activities/${row.id}`)
 }
 
+const safeParseReviewerIds = (reviewerIds: string | null | undefined): number[] => {
+  if (!reviewerIds) return []
+  try {
+    const parsed = JSON.parse(reviewerIds)
+    if (Array.isArray(parsed)) {
+      return parsed.map((id: unknown) => Number(id)).filter((id: number) => !isNaN(id))
+    }
+  } catch {
+    // 解析失败返回空数组
+  }
+  return []
+}
+
 const handleEdit = (row: any) => {
   editId.value = row.id
   Object.assign(form, {
@@ -306,7 +325,7 @@ const handleEdit = (row: any) => {
     level: row.level,
     maxParticipants: row.maxParticipants || 0,
     reviewerCount: row.reviewerCount !== undefined && row.reviewerCount !== null ? row.reviewerCount : 2,
-    selectedReviewers: row.reviewerIds ? JSON.parse(row.reviewerIds).map((id: number) => id) : [],
+    selectedReviewers: safeParseReviewerIds(row.reviewerIds),
     enrollmentStart: row.enrollmentStart,
     enrollmentEnd: row.enrollmentEnd,
     examStart: row.examStart,
@@ -320,7 +339,7 @@ const handleEdit = (row: any) => {
 const handleReviewerConfig = (row: any) => {
   currentActivityId.value = row.id
   reviewerConfig.reviewerCount = row.reviewerCount !== undefined && row.reviewerCount !== null ? row.reviewerCount : 2
-  reviewerConfig.selectedReviewers = row.reviewerIds ? JSON.parse(row.reviewerIds).map((id: number) => id) : []
+  reviewerConfig.selectedReviewers = safeParseReviewerIds(row.reviewerIds)
   reviewerDialogVisible.value = true
 }
 
@@ -354,12 +373,12 @@ const handleSubmit = async () => {
   try {
     let res
     if (editId.value) {
-      res = await updateActivity(editId.value, form)
+      res = await updateActivity(editId.value, form as Partial<Activity>)
     } else {
       res = await createActivity({
         ...form,
         status: 'draft'
-      })
+      } as Partial<Activity>)
     }
     if (res.code === 200) {
       ElMessage.success('操作成功')

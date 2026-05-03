@@ -10,7 +10,8 @@
       
       <el-form inline>
         <el-form-item label="活动">
-          <el-select v-model="query.activityId" placeholder="请选择" clearable filterable @change="loadData" style="width: 200px;">
+          <el-select v-model="query.periodId" placeholder="请选择" clearable filterable @change="loadData" style="width: 200px;">
+            <!-- 注意：query 保留 periodId，但 UI 显示为活动 -->
             <el-option v-for="p in activities" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
@@ -70,6 +71,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getPapers, createPaper, updatePaper, deletePaper } from '@/api/exam'
 import { getActivityList } from '@/api/activity'
+import type { ExamPaper } from '@/api/exam'
 
 const router = useRouter()
 
@@ -82,7 +84,7 @@ const formRef = ref()
 
 const activities = ref<any[]>([])
 const query = reactive({
-  activityId: null as number | null,
+  periodId: null as number | null,
   page: 1,
   size: 10
 })
@@ -91,7 +93,7 @@ const form = reactive({
   activityId: null as number | null,
   name: '',
   description: '',
-  status: 'draft'
+  status: 'draft' as ExamPaper['status']
 })
 
 const rules = {
@@ -103,21 +105,21 @@ const loadActivities = async () => {
   const res = await getActivityList()
   if (res.code === 200) {
     activities.value = res.data
-    if (activities.value.length > 0 && !query.activityId) {
-      query.activityId = activities.value[0].id
+    if (activities.value.length > 0 && !query.periodId) {
+      query.periodId = activities.value[0].id
       loadData()
     }
   }
 }
 
 const loadData = async () => {
-  if (!query.activityId) return
+  if (!query.periodId) return
   loading.value = true
   try {
-    const res = await getPapers({ activityId: query.activityId, page: query.page, size: query.size })
+    const res = await getPapers({ periodId: query.periodId, page: query.page, size: query.size })
     if (res.code === 200) {
-      tableData.value = res.data.content
-      total.value = res.data.totalElements
+      tableData.value = res.data.records
+      total.value = res.data.total
     }
   } finally {
     loading.value = false
@@ -127,10 +129,10 @@ const loadData = async () => {
 const handleAdd = () => {
   editId.value = null
   Object.assign(form, {
-    activityId: query.activityId,
+    activityId: query.periodId,
     name: '',
     description: '',
-    status: 'draft'
+    status: 'draft' as ExamPaper['status']
   })
   dialogVisible.value = true
 }
@@ -138,10 +140,10 @@ const handleAdd = () => {
 const handleEdit = async (row: any) => {
   editId.value = row.id
   Object.assign(form, {
-    activityId: row.activityId,
+    activityId: row.periodId,
     name: row.name,
     description: row.description,
-    status: row.status
+    status: row.status as ExamPaper['status']
   })
   dialogVisible.value = true
 }
@@ -149,14 +151,19 @@ const handleEdit = async (row: any) => {
 const handleSubmit = async () => {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
-  
+  if (!form.activityId) {
+    ElMessage.error('请选择活动')
+    return
+  }
+
   loading.value = true
   try {
+    const payload = { ...form, periodId: form.activityId } as Partial<ExamPaper>
     let res
     if (editId.value) {
-      res = await updatePaper(editId.value, form)
+      res = await updatePaper(editId.value, payload)
     } else {
-      res = await createPaper(form)
+      res = await createPaper(payload)
     }
     if (res.code === 200) {
       ElMessage.success('操作成功')

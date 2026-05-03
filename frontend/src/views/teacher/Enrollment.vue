@@ -10,13 +10,13 @@
       <el-tabs v-model="activeTab">
         <!-- 已报名活动 - 卡片展示 -->
         <el-tab-pane label="已报名活动" name="enrolled">
-          <div v-if="myActivities.length === 0 && !loading" class="empty-container">
+          <div v-if="myEnrollments.length === 0 && !loading" class="empty-container">
             <el-empty description="暂未报名任何考核活动" />
           </div>
 
           <div v-else class="activity-grid">
             <div
-              v-for="item in myActivities"
+              v-for="item in myEnrollments"
               :key="item.id"
               class="activity-card"
               @click="goToActivityDetail(item)"
@@ -45,26 +45,37 @@
 
               <!-- C级：显示考试状态 -->
               <div v-if="item.level === 'C'" class="card-action">
-                <template v-if="!item.examRecordId || item.examStatus === 'in_progress'">
+                <template v-if="item.examStatus === 'in_progress'">
                   <template v-if="isExamWindowOpen(item)">
-                    <el-button type="primary" @click.stop="goToExam(item)">
-                      {{ item.examStatus === 'in_progress' ? '继续考试' : '开始考试' }}
-                    </el-button>
+                    <el-button type="primary" @click.stop="goToExam(item)">继续考试</el-button>
+                  </template>
+                  <template v-else>
+                    <el-button type="info" disabled>考试时间已结束</el-button>
+                  </template>
+                </template>
+                <template v-else-if="item.examRecordId">
+                  <template v-if="!item.scorePublished">
+                    <el-button type="info" disabled>考试完成，等待评分</el-button>
+                  </template>
+                  <template v-else>
+                    <div class="score-display">
+                      <span class="score-label">得分</span>
+                      <span class="score-value" :class="getScoreClass(item.finalScore)">
+                        {{ item.finalScore }}
+                      </span>
+                    </div>
+                  </template>
+                  <el-button type="primary" size="small" @click.stop="viewExamDetail(item)" style="margin-left: 8px;">
+                    查看详情
+                  </el-button>
+                </template>
+                <template v-else>
+                  <template v-if="isExamWindowOpen(item)">
+                    <el-button type="primary" @click.stop="goToExam(item)">开始考试</el-button>
                   </template>
                   <template v-else>
                     <el-button type="info" disabled>未开放</el-button>
                   </template>
-                </template>
-                <template v-else-if="!item.scorePublished">
-                  <el-button type="info" disabled>考试完成，等待评分</el-button>
-                </template>
-                <template v-else>
-                  <div class="score-display">
-                    <span class="score-label">得分</span>
-                    <span class="score-value" :class="getScoreClass(item.finalScore)">
-                      {{ item.finalScore }}
-                    </span>
-                  </div>
                 </template>
               </div>
 
@@ -146,9 +157,9 @@
                 <el-button
                   type="primary"
                   @click="handleEnroll(row)"
-                  :disabled="!row.canEnroll || (row.enrollmentInfo && row.enrollmentInfo.remaining === 0)"
+                  :disabled="row.enrollmentStatus !== 'active' || !row.canEnroll || (row.enrollmentInfo && row.enrollmentInfo.remaining === 0)"
                 >
-                  报名
+                  {{ row.enrollmentStatus === 'ended' ? '报名已截止' : row.enrollmentStatus === 'pending' ? '未开始' : '报名' }}
                 </el-button>
               </template>
             </el-table-column>
@@ -164,13 +175,16 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getMyEnrollments, enrollActivity, getAvailableActivitiesForTeacher, canEnrollActivity, getEnrollmentInfo } from '@/api/activity'
+import { storeToRefs } from 'pinia'
+import { useActivityStore } from '@/stores/activity'
+import type { Activity } from '@/api/types'
 
 const router = useRouter()
+const activityStore = useActivityStore()
+const { myEnrollments, loading } = storeToRefs(activityStore)
+
 const activeTab = ref('enrolled')
-const loading = ref(false)
-const availableActivities = ref<any[]>([])
-const myActivities = ref<any[]>([])
+const availableActivities = ref<(Activity & { enrollmentStatus?: string; canEnroll?: boolean; enrollmentInfo?: any })[]>([])
 
 const formatDateTime = (datetime: string | null) => {
   if (!datetime) return '-'
@@ -226,7 +240,8 @@ const getStatusText = (item: any) => {
   return statusMap[status] || ''
 }
 
-const getScoreClass = (score: number) => {
+const getScoreClass = (score: number | null) => {
+  if (score === null) return 'score-low'
   if (score >= 90) return 'score-high'
   if (score >= 60) return 'score-mid'
   return 'score-low'
@@ -264,74 +279,57 @@ const isMaterialWindowOpen = (item: any) => {
 }
 
 const loadAvailableActivities = async () => {
-  loading.value = true
-  try {
-    const res = await getAvailableActivitiesForTeacher()
-    if (res.code === 200) {
-      const activities = res.data || []
-      const now = new Date()
+  const activities = await activityStore.loadAvailableActivities()
+  const now = new Date()
 
-      for (const activity of activities) {
-        // 计算报名状态
-        const enrollmentStart = activity.enrollmentStart ? new Date(activity.enrollmentStart) : null
-        const enrollmentEnd = activity.enrollmentEnd ? new Date(activity.enrollmentEnd) : null
-
-        if (enrollmentStart && now < enrollmentStart) {
-          activity.enrollmentStatus = 'pending' // 未到报名时间
-        } else if (enrollmentEnd && now > enrollmentEnd) {
-          activity.enrollmentStatus = 'ended' // 已过报名时间
-        } else {
-          activity.enrollmentStatus = 'active' // 报名时间段内
-        }
-
-        try {
-          const checkRes = await canEnrollActivity(activity.id)
-          activity.canEnroll = checkRes.data
-        } catch {
-          activity.canEnroll = false
-        }
-        try {
-          const infoRes = await getEnrollmentInfo(activity.id)
-          activity.enrollmentInfo = infoRes.data
-        } catch {
-          activity.enrollmentInfo = null
-        }
+  const enhanced = await Promise.all(
+    activities.map(async (activity) => {
+      const enrollmentStart = activity.enrollmentStart ? new Date(activity.enrollmentStart) : null
+      const enrollmentEnd = activity.enrollmentEnd ? new Date(activity.enrollmentEnd) : null
+      let enrollmentStatus = 'active'
+      if (enrollmentStart && now < enrollmentStart) {
+        enrollmentStatus = 'pending'
+      } else if (enrollmentEnd && now > enrollmentEnd) {
+        enrollmentStatus = 'ended'
       }
 
-      // 排序：按报名开始时间从旧到新，已过报名截止的放在最后
-      const statusOrder = { active: 0, pending: 1, ended: 2 }
-      activities.sort((a, b) => {
-        // 先按状态排序（报名中 > 未开始 > 已结束）
-        const statusDiff = statusOrder[a.enrollmentStatus] - statusOrder[b.enrollmentStatus]
-        if (statusDiff !== 0) return statusDiff
-        // 同状态内按报名开始时间排序
-        const aTime = a.enrollmentStart ? new Date(a.enrollmentStart).getTime() : 0
-        const bTime = b.enrollmentStart ? new Date(b.enrollmentStart).getTime() : 0
-        return aTime - bTime
-      })
+      const [canEnroll, enrollmentInfo] = await Promise.all([
+        activityStore.checkCanEnroll(activity.id).catch(() => false),
+        activityStore.loadEnrollmentInfo(activity.id).catch(() => null)
+      ])
 
-      availableActivities.value = activities
-    }
-  } finally {
-    loading.value = false
-  }
+      return {
+        ...activity,
+        enrollmentStatus,
+        canEnroll,
+        enrollmentInfo
+      }
+    })
+  )
+
+  const statusOrder = { active: 0, pending: 1, ended: 2 }
+  enhanced.sort((a, b) => {
+    const statusDiff = statusOrder[a.enrollmentStatus as keyof typeof statusOrder] - statusOrder[b.enrollmentStatus as keyof typeof statusOrder]
+    if (statusDiff !== 0) return statusDiff
+    const aTime = a.enrollmentStart ? new Date(a.enrollmentStart).getTime() : 0
+    const bTime = b.enrollmentStart ? new Date(b.enrollmentStart).getTime() : 0
+    return aTime - bTime
+  })
+
+  availableActivities.value = enhanced
 }
 
 const loadMyActivities = async () => {
-  const res = await getMyEnrollments()
-  if (res.code === 200) {
-    myActivities.value = res.data || []
-  }
+  await activityStore.loadMyEnrollments()
 }
 
 const handleEnroll = async (row: any) => {
   try {
-    const res = await enrollActivity(row.id)
+    const res = await activityStore.doEnroll(row.id)
     if (res.code === 200) {
       const levelText = row.level === 'C' ? '考试' : '上传考核文档'
       ElMessage.success(`报名成功！请等待报名时间开始后进行${row.level}级${levelText}。`)
-      loadAvailableActivities()
-      loadMyActivities()
+      await loadAvailableActivities()
       activeTab.value = 'enrolled'
     }
   } catch (e: any) {
@@ -346,6 +344,10 @@ const goToUpload = (row: any) => {
 
 const goToExam = (row: any) => {
   router.push({ path: '/teacher/exam', query: { activityId: row.activityId } })
+}
+
+const viewExamDetail = (item: any) => {
+  router.push({ path: '/teacher/exam', query: { recordId: item.examRecordId } })
 }
 
 const goToActivityDetail = (item: any) => {

@@ -10,7 +10,7 @@
 *.iws
 
 # Maven
-target/
+# target/   # 保留：宿主机预编译jar需打包进镜像
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup

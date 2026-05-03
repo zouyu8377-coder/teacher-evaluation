@@ -16,6 +16,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ExamRecordService {
@@ -26,7 +29,8 @@ public class ExamRecordService {
     private final PaperQuestionRepository paperQuestionRepository;
     private final EvaluationRepository evaluationRepository;
     private final ActivityService activityService;
-    
+    private final EnrollmentService enrollmentService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     
     public ExamRecord startExam(Long activityId, Long teacherId) {
@@ -34,6 +38,16 @@ public class ExamRecordService {
         Activity activity = activityService.getById(activityId);
         if (!Boolean.TRUE.equals(activity.getHasExam()) || activity.getExamPaperId() == null) {
             throw new RuntimeException("该活动没有关联试卷");
+        }
+
+        // 校验活动状态
+        if (activity.getStatus() != Activity.Status.active) {
+            throw new BusinessException("该活动未开启或已结束，无法参加考试");
+        }
+
+        // 校验教师是否已报名
+        if (!enrollmentService.isEnrolledByActivity(activityId, teacherId)) {
+            throw new BusinessException("您尚未报名该活动，无法参加考试");
         }
 
         // 检查当前时间是否在考试时间段内
@@ -48,20 +62,21 @@ public class ExamRecordService {
             throw new BusinessException("考试已结束，结束时间：" + activity.getExamEnd().toString().replace("T", " "));
         }
 
-        // 检查是否已有已提交的考试记录
-        // 每个活动每个用户只有一次考试机会，未通过也不得重考
-        Optional<ExamRecord> existing = recordRepository.findByTeacherIdAndActivityIdAndStatus(
-            teacherId, activityId, ExamRecord.Status.submitted);
-        if (existing.isPresent()) {
-            // 已提交过考试，不允许再次参加
-            throw new RuntimeException("您已参加过该考试，无法再次参加");
+        // 检查是否已有考试记录，每个活动每个用户只有一次考试机会
+        List<ExamRecord> existingRecords = recordRepository.findByTeacherIdAndActivityId(teacherId, activityId);
+
+        Optional<ExamRecord> inProgress = existingRecords.stream()
+            .filter(r -> r.getStatus() == ExamRecord.Status.in_progress)
+            .findFirst();
+
+        if (inProgress.isPresent()) {
+            // 有进行中的考试，直接返回继续作答
+            return inProgress.get();
         }
 
-        // 检查是否有进行中的考试
-        Optional<ExamRecord> inProgress = recordRepository.findByTeacherIdAndActivityIdAndStatus(
-            teacherId, activityId, ExamRecord.Status.in_progress);
-        if (inProgress.isPresent()) {
-            return inProgress.get();
+        if (!existingRecords.isEmpty()) {
+            // 已参加过该考试（不论是否通过），不允许再次参加
+            throw new RuntimeException("您已参加过该考试，不可重复考试");
         }
 
         // 创建考试记录
@@ -86,7 +101,7 @@ public class ExamRecordService {
     }
     
     public List<ExamRecord> getMyRecords(Long teacherId) {
-        return recordRepository.findByTeacherIdAndActivityId(teacherId, null);
+        return recordRepository.findByTeacherId(teacherId);
     }
     
     public Page<ExamRecord> getRecordsByActivity(Long activityId, int page, int size) {
@@ -96,12 +111,19 @@ public class ExamRecordService {
     
     public Map<String, Object> getExamQuestions(Long recordId, Long currentUserId) {
         ExamRecord record = getRecordById(recordId);
-        
+
         // 校验权限
         if (!record.getTeacherId().equals(currentUserId)) {
             throw new RuntimeException("无权限查看");
         }
-        
+
+        // 校验当前时间是否在考试窗口内（防止考试时间结束后仍加载题目）
+        Activity activity = activityService.getById(record.getActivityId());
+        LocalDateTime now = LocalDateTime.now();
+        if (activity.getExamEnd() != null && now.isAfter(activity.getExamEnd())) {
+            throw new BusinessException("考试时间已结束，无法查看题目");
+        }
+
         ExamPaper paper = paperRepository.findById(record.getPaperId())
             .orElseThrow(() -> new RuntimeException("试卷不存在"));
         
@@ -151,9 +173,9 @@ public class ExamRecordService {
         Integer durationMinutes = paper.getDurationMinutes();
         if (record.getActivityId() != null) {
             try {
-                Activity activity = activityService.getById(record.getActivityId());
-                if (activity.getExamDurationMinutes() != null && activity.getExamDurationMinutes() > 0) {
-                    durationMinutes = activity.getExamDurationMinutes();
+                Activity act = activityService.getById(record.getActivityId());
+                if (act.getExamDurationMinutes() != null && act.getExamDurationMinutes() > 0) {
+                    durationMinutes = act.getExamDurationMinutes();
                 }
             } catch (Exception e) {
                 // 忽略活动获取失败，使用试卷默认时长
@@ -169,6 +191,7 @@ public class ExamRecordService {
         ));
         result.put("record", Map.of(
             "id", record.getId(),
+            "activityId", record.getActivityId(),
             "status", record.getStatus().name(),
             "startedAt", record.getStartedAt(),
             "score", record.getScore() != null ? record.getScore() : "-",
@@ -183,15 +206,27 @@ public class ExamRecordService {
     @Transactional
     public ExamRecord saveAnswer(Long recordId, Map<String, String> answers, Long currentUserId) {
         ExamRecord record = getRecordById(recordId);
-        
+
         if (!record.getTeacherId().equals(currentUserId)) {
             throw new RuntimeException("无权限操作");
         }
-        
+
         if (record.getStatus() != ExamRecord.Status.in_progress) {
             throw new RuntimeException("考试已结束，无法作答");
         }
-        
+
+        // 校验教师是否仍具有报名资格（防止被踢出后仍继续考试）
+        if (!enrollmentService.isEnrolledByActivity(record.getActivityId(), currentUserId)) {
+            throw new BusinessException("您已被移出该活动，无法继续作答");
+        }
+
+        // 校验考试时间是否已结束
+        Activity activity = activityService.getById(record.getActivityId());
+        LocalDateTime now = LocalDateTime.now();
+        if (activity.getExamEnd() != null && now.isAfter(activity.getExamEnd())) {
+            throw new BusinessException("考试时间已结束，无法保存答案");
+        }
+
         // 合并答案
         Map<String, String> existingAnswers = new HashMap<>();
         if (record.getAnswers() != null) {
@@ -218,15 +253,27 @@ public class ExamRecordService {
     @Transactional
     public ExamRecord submitExam(Long recordId, Long currentUserId) {
         ExamRecord record = getRecordById(recordId);
-        
+
         if (!record.getTeacherId().equals(currentUserId)) {
             throw new RuntimeException("无权限操作");
         }
-        
+
         if (record.getStatus() != ExamRecord.Status.in_progress) {
             throw new RuntimeException("考试已提交");
         }
-        
+
+        // 校验教师是否仍具有报名资格（防止被踢出后仍提交）
+        if (!enrollmentService.isEnrolledByActivity(record.getActivityId(), currentUserId)) {
+            throw new BusinessException("您已被移出该活动，无法提交考试");
+        }
+
+        // 校验考试时间是否已结束
+        Activity activity = activityService.getById(record.getActivityId());
+        LocalDateTime now = LocalDateTime.now();
+        if (activity.getExamEnd() != null && now.isAfter(activity.getExamEnd())) {
+            throw new BusinessException("考试时间已结束，无法提交");
+        }
+
         // 自动判分
         record = autoGrade(record);
         record.setSubmittedAt(LocalDateTime.now());
@@ -242,27 +289,33 @@ public class ExamRecordService {
     
     public ExamRecord autoGrade(ExamRecord record) {
         List<PaperQuestion> pqs = paperQuestionRepository.findByPaperIdOrderByQuestionOrder(record.getPaperId());
-        
+
         Map<String, String> answers = new HashMap<>();
         if (record.getAnswers() != null) {
             try {
-                answers = objectMapper.readValue(record.getAnswers(), 
+                answers = objectMapper.readValue(record.getAnswers(),
                     new TypeReference<Map<String, String>>() {});
             } catch (Exception e) {
                 answers = new HashMap<>();
             }
         }
-        
+
         BigDecimal autoScore = BigDecimal.ZERO;
         int correctCount = 0;
         int wrongCount = 0;
-        
+
+        log.info("Auto-grading recordId={}, paperId={}, answerCount={}, totalQuestions={}",
+            record.getId(), record.getPaperId(), answers.size(), pqs.size());
+
         for (PaperQuestion pq : pqs) {
             ExamQuestion q = pq.getQuestion();
             String userAnswer = answers.get(String.valueOf(pq.getQuestionOrder()));
-            
+
             boolean isCorrect = isAnswerCorrect(userAnswer, q.getCorrectAnswer(), q.getQuestionType());
-            
+
+            log.info("Grading question order={}, userAnswer='{}', correctAnswer='{}', type={}, isCorrect={}",
+                pq.getQuestionOrder(), userAnswer, q.getCorrectAnswer(), q.getQuestionType(), isCorrect);
+
             if (isCorrect) {
                 autoScore = autoScore.add(BigDecimal.valueOf(q.getScore()));
                 correctCount++;
@@ -270,12 +323,15 @@ public class ExamRecordService {
                 wrongCount++;
             }
         }
-        
+
+        log.info("Auto-grade complete recordId={}, correctCount={}, wrongCount={}, autoScore={}",
+            record.getId(), correctCount, wrongCount, autoScore);
+
         record.setAutoScore(autoScore);
         record.setScore(autoScore.add(record.getManualAdjust() != null ? record.getManualAdjust() : BigDecimal.ZERO));
         record.setCorrectCount(correctCount);
         record.setWrongCount(wrongCount);
-        
+
         return record;
     }
     
@@ -297,26 +353,28 @@ public class ExamRecordService {
         }
     }
     
+    private static final Long SYSTEM_EVALUATOR_ID = 1L;
+
     private void syncToEvaluation(ExamRecord record) {
-        // 查找或创建Evaluation记录
-        List<Evaluation> evals = evaluationRepository.findByTeacherIdAndActivityId(
-            record.getTeacherId(), record.getActivityId());
-        
+        // 精确查找系统Evaluation记录，避免覆盖考核员评分
+        Optional<Evaluation> sysEvalOpt = evaluationRepository.findByTeacherIdAndActivityIdAndEvaluatorId(
+            record.getTeacherId(), record.getActivityId(), SYSTEM_EVALUATOR_ID);
+
         Evaluation evaluation;
-        if (!evals.isEmpty()) {
-            evaluation = evals.get(0);
+        if (sysEvalOpt.isPresent()) {
+            evaluation = sysEvalOpt.get();
         } else {
             evaluation = new Evaluation();
             evaluation.setTeacherId(record.getTeacherId());
             evaluation.setActivityId(record.getActivityId());
-            evaluation.setEvaluatorId(1L); // 系统 evaluator
+            evaluation.setEvaluatorId(SYSTEM_EVALUATOR_ID);
         }
-        
+
         evaluation.setExamRecordId(record.getId());
         evaluation.setAutoScore(record.getAutoScore());
         evaluation.setManualAdjust(record.getManualAdjust());
         evaluation.setScore(record.getScore());
-        
+
         evaluationRepository.save(evaluation);
     }
     
@@ -338,16 +396,21 @@ public class ExamRecordService {
         return record;
     }
     
-    public Map<String, Object> getExamDetail(Long recordId) {
+    public Map<String, Object> getExamDetail(Long recordId, Long viewerId, boolean isEvaluatorOrAdmin) {
         ExamRecord record = getRecordById(recordId);
         ExamPaper paper = paperRepository.findById(record.getPaperId())
             .orElseThrow(() -> new RuntimeException("试卷不存在"));
 
-        // 检查成绩是否已发布，只有发布后才能查看正确答案
+        // 检查成绩是否已发布
         List<Evaluation> evals = evaluationRepository.findByTeacherIdAndActivityId(
             record.getTeacherId(), record.getActivityId());
         boolean isPublished = evals.stream()
             .anyMatch(e -> Boolean.TRUE.equals(e.getIsPublished()));
+
+        boolean isOwner = record.getTeacherId().equals(viewerId);
+        boolean showDetail = isPublished
+            || (isOwner && record.getStatus() == ExamRecord.Status.submitted)
+            || isEvaluatorOrAdmin;
 
         List<PaperQuestion> pqs = paperQuestionRepository.findByPaperIdOrderByQuestionOrder(paper.getId());
 
@@ -374,8 +437,8 @@ public class ExamRecordService {
             qMap.put("score", q.getScore());
             qMap.put("userAnswer", userAnswer);
 
-            // 只有成绩发布后才返回正确答案和解析
-            if (isPublished) {
+            // 成绩已发布，或考生查看自己的已提交记录，返回正确答案和解析
+            if (showDetail) {
                 qMap.put("correctAnswer", q.getCorrectAnswer());
                 qMap.put("explanation", q.getExplanation());
                 qMap.put("isCorrect", isAnswerCorrect(userAnswer, q.getCorrectAnswer(), q.getQuestionType()));
@@ -387,6 +450,7 @@ public class ExamRecordService {
         Map<String, Object> result = new HashMap<>();
         result.put("record", Map.of(
             "id", record.getId(),
+            "activityId", record.getActivityId(),
             "score", record.getScore(),
             "autoScore", record.getAutoScore(),
             "manualAdjust", record.getManualAdjust(),

@@ -1,10 +1,5 @@
 import api from './index'
-
-interface ApiResponse<T = any> {
-  code: number
-  message: string
-  data: T
-}
+import type { ApiResponse, PageResponse, UserVO } from './types'
 
 export interface UserQuery {
   page?: number
@@ -13,8 +8,8 @@ export interface UserQuery {
   keyword?: string
 }
 
-export const getUserList = (params: UserQuery): Promise<ApiResponse<{ records: any[], total: number }>> => {
-  return api.get('/users', { params })
+export const getUserList = (params: UserQuery) => {
+  return api.get('/users', { params }) as Promise<ApiResponse<PageResponse<UserVO>>>
 }
 
 export const createUser = (data: {
@@ -23,16 +18,16 @@ export const createUser = (data: {
   realName: string
   role: string
   department: string
-}): Promise<ApiResponse<any>> => {
-  return api.post('/users', data)
+}) => {
+  return api.post('/users', data) as Promise<ApiResponse<UserVO>>
 }
 
-export const getTeachers = (): Promise<ApiResponse<any[]>> => {
-  return api.get('/users/teachers')
+export const getTeachers = () => {
+  return api.get('/users/teachers') as Promise<ApiResponse<UserVO[]>>
 }
 
-export const getEvaluators = (): Promise<ApiResponse<any[]>> => {
-  return api.get('/users/evaluators')
+export const getEvaluators = () => {
+  return api.get('/users/evaluators') as Promise<ApiResponse<UserVO[]>>
 }
 
 export const updateUser = (id: number, data: {
@@ -41,10 +36,10 @@ export const updateUser = (id: number, data: {
   role?: string
   department?: string
   status?: number
-}): Promise<ApiResponse<any>> => {
-  return api.put(`/users/${id}`, data)
+}) => {
+  return api.put(`/users/${id}`, data) as Promise<ApiResponse<UserVO>>
 }
 
-export const deleteUser = (id: number): Promise<ApiResponse<any>> => {
-  return api.delete(`/users/${id}`)
+export const deleteUser = (id: number) => {
+  return api.delete(`/users/${id}`) as Promise<ApiResponse<void>>
 }

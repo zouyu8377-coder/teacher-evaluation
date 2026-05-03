@@ -5,6 +5,8 @@ import com.school.teacherEval.entity.Document;
 import com.school.teacherEval.entity.User;
 import com.school.teacherEval.service.DocumentService;
 import com.school.teacherEval.service.UserService;
+import com.school.teacherEval.vo.DocumentVO;
+import com.school.teacherEval.vo.PageVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
@@ -19,8 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
@@ -34,28 +35,26 @@ public class DocumentController {
     
     @GetMapping
     @Operation(summary = "获取文档列表")
-    public ApiResponse<Map<String, Object>> getDocuments(
+    public ApiResponse<PageVO<DocumentVO>> getDocuments(
             @RequestParam(required = false) Long activityId,
             @RequestParam(required = false) Long userId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        
+
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String username = auth.getName();
         User currentUser = userService.getCurrentUser(username);
-        
+
         if (currentUser.getRole() == User.Role.teacher) {
             userId = currentUser.getId();
         }
-        
+
         Page<Document> docPage = documentService.getDocuments(userId, activityId, page, size);
-        
-        Map<String, Object> data = new HashMap<>();
-        data.put("records", docPage.getContent().stream().map(this::toVO).collect(Collectors.toList()));
-        data.put("total", docPage.getTotalElements());
-        data.put("page", page);
-        data.put("size", size);
-        
+        List<DocumentVO> records = docPage.getContent().stream()
+                .map(this::toVO)
+                .collect(Collectors.toList());
+        PageVO<DocumentVO> data = new PageVO<>(records, docPage.getTotalElements(), page, size);
+
         return ApiResponse.success(data);
     }
     
@@ -80,7 +79,7 @@ public class DocumentController {
     
     @GetMapping("/{id}")
     @Operation(summary = "获取文档详情")
-    public ApiResponse<Map<String, Object>> getDocument(@PathVariable Long id) {
+    public ApiResponse<DocumentVO> getDocument(@PathVariable Long id) {
         Document document = documentService.getDocumentById(id);
         return ApiResponse.success(toVO(document));
     }
@@ -134,25 +133,25 @@ public class DocumentController {
         outputStream.flush();
     }
     
-    private Map<String, Object> toVO(Document doc) {
-        Map<String, Object> map = new HashMap<>();
-        map.put("id", doc.getId());
-        map.put("userId", doc.getUserId());
-        map.put("activityId", doc.getActivityId());
-        map.put("title", doc.getTitle());
-        map.put("fileName", doc.getFileName());
-        map.put("fileSize", doc.getFileSize());
-        map.put("fileType", doc.getFileType());
-        map.put("description", doc.getDescription());
-        map.put("createdAt", doc.getCreatedAt());
-        
+    private DocumentVO toVO(Document doc) {
+        String realName = "";
         try {
             User teacher = userService.getUserById(doc.getUserId());
-            map.put("realName", teacher.getRealName());
+            realName = teacher.getRealName();
         } catch (Exception e) {
-            map.put("realName", "");
+            // ignore
         }
-        
-        return map;
+        return new DocumentVO(
+                doc.getId(),
+                doc.getUserId(),
+                doc.getActivityId(),
+                doc.getTitle(),
+                doc.getFileName(),
+                doc.getFileSize(),
+                doc.getFileType(),
+                doc.getDescription(),
+                doc.getCreatedAt(),
+                realName
+        );
     }
 }

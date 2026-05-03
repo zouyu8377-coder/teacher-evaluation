@@ -16,6 +16,8 @@ public interface ExamRecordRepository extends JpaRepository<ExamRecord, Long> {
 
     List<ExamRecord> findByTeacherIdAndActivityId(Long teacherId, Long activityId);
 
+    List<ExamRecord> findByTeacherId(Long teacherId);
+
     Optional<ExamRecord> findFirstByTeacherIdAndActivityIdOrderByIdDesc(Long teacherId, Long activityId);
 
     Optional<ExamRecord> findByTeacherIdAndActivityIdAndStatus(Long teacherId, Long activityId, ExamRecord.Status status);

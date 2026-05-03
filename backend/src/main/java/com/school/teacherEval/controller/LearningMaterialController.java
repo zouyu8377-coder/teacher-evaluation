@@ -7,6 +7,8 @@ import com.school.teacherEval.entity.User;
 import com.school.teacherEval.service.ActivityService;
 import com.school.teacherEval.service.LearningMaterialService;
 import com.school.teacherEval.service.UserService;
+import com.school.teacherEval.vo.LearningMaterialVO;
+import com.school.teacherEval.vo.PageVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,8 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
@@ -37,25 +38,23 @@ public class LearningMaterialController {
     
     @GetMapping
     @Operation(summary = "获取学习资料列表")
-    public ApiResponse<Map<String, Object>> getMaterials(
+    public ApiResponse<PageVO<LearningMaterialVO>> getMaterials(
             @RequestParam(required = false) Long activityId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        
+
         Page<LearningMaterial> materialPage = materialService.getMaterials(activityId, page, size);
-        
-        Map<String, Object> data = new HashMap<>();
-        data.put("records", materialPage.getContent().stream().map(this::toVO).collect(Collectors.toList()));
-        data.put("total", materialPage.getTotalElements());
-        data.put("page", page);
-        data.put("size", size);
-        
+        List<LearningMaterialVO> records = materialPage.getContent().stream()
+                .map(this::toVO)
+                .collect(Collectors.toList());
+        PageVO<LearningMaterialVO> data = new PageVO<>(records, materialPage.getTotalElements(), page, size);
+
         return ApiResponse.success(data);
     }
-    
+
     @GetMapping("/{id}")
     @Operation(summary = "获取学习资料详情")
-    public ApiResponse<Map<String, Object>> getMaterial(@PathVariable Long id) {
+    public ApiResponse<LearningMaterialVO> getMaterial(@PathVariable Long id) {
         LearningMaterial material = materialService.getMaterialById(id);
         return ApiResponse.success(toVO(material));
     }
@@ -135,34 +134,37 @@ public class LearningMaterialController {
         outputStream.flush();
     }
     
-    private Map<String, Object> toVO(LearningMaterial material) {
-        Map<String, Object> map = new HashMap<>();
-        map.put("id", material.getId());
-        map.put("activityId", material.getActivityId());
-        map.put("title", material.getTitle());
-        map.put("fileName", material.getFileName());
-        map.put("fileSize", material.getFileSize());
-        map.put("fileType", material.getFileType());
-        map.put("description", material.getDescription());
-        map.put("createdBy", material.getCreatedBy());
-        map.put("createdAt", material.getCreatedAt());
-        
+    private LearningMaterialVO toVO(LearningMaterial material) {
+        String creatorName = "";
         try {
             User creator = userService.getUserById(material.getCreatedBy());
-            map.put("creatorName", creator.getRealName());
+            creatorName = creator.getRealName();
         } catch (Exception e) {
-            map.put("creatorName", "");
+            // ignore
         }
-        
+
+        String activityName = "";
         try {
             if (material.getActivityId() != null) {
                 Activity activity = activityService.getById(material.getActivityId());
-                map.put("activityName", activity.getName());
+                activityName = activity.getName();
             }
         } catch (Exception e) {
-            map.put("activityName", "");
+            // ignore
         }
-        
-        return map;
+
+        return new LearningMaterialVO(
+                material.getId(),
+                material.getActivityId(),
+                material.getTitle(),
+                material.getFileName(),
+                material.getFileSize(),
+                material.getFileType(),
+                material.getDescription(),
+                material.getCreatedBy(),
+                material.getCreatedAt(),
+                creatorName,
+                activityName
+        );
     }
 }

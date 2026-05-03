@@ -54,10 +54,7 @@ api.interceptors.response.use(
       router.push('/login')
       ElMessage.error('登录已过期，请重新登录')
     } else if (error.response?.status === 403) {
-      // 获取当前用户接口403不弹窗，其他接口都弹窗提示
-      if (!error.config?.url?.includes('/auth/current')) {
-        ElMessage.error('无权限访问该功能，请联系管理员')
-      }
+      // 403全局静默处理，不弹窗提示，仅在控制台输出警告
       logger.warn('无权限访问该API接口:', error.config?.url)
     } else if (error.response?.data?.message) {
       ElMessage.error(error.response.data.message)

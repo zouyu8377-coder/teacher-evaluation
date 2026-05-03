@@ -36,6 +36,11 @@ export interface EnrollmentInfo {
   examDurationMinutes: number
   examStatus: 'not_started' | 'in_progress' | 'completed'
   examRecordId: number | null
+  scorePublished?: boolean
+  finalScore?: number | null
+  isPassed?: boolean | null
+  correctCount?: number | null
+  wrongCount?: number | null
 }
 
 export interface HistoryRecord {

@@ -2,13 +2,16 @@ package com.school.teacherEval.service;
 
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Evaluation;
+import com.school.teacherEval.entity.ExamRecord;
 import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.ActivityRepository;
+import com.school.teacherEval.repository.DocumentRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
 import com.school.teacherEval.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -29,12 +32,20 @@ public class EvaluationService {
     private final UserRepository userRepository;
     private final ActivityService activityService;
     private final ActivityRepository activityRepository;
+    private final ExamRecordService examRecordService;
+    private final DocumentRepository documentRepository;
     
     public Page<Evaluation> getEvaluations(Long activityId, Long teacherId, int page, int size) {
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        
+
         if (activityId != null && teacherId != null) {
-            return evaluationRepository.findByActivityId(activityId, pageable);
+            // 注意：JPA仓库方法 findByActivityIdAndTeacherId 返回 List，这里统一走分页查询
+            // 由于 repository 没有分页版本，先查 List 再手动分页
+            List<Evaluation> list = evaluationRepository.findByActivityIdAndTeacherId(activityId, teacherId);
+            int start = (int) pageable.getOffset();
+            int end = Math.min(start + pageable.getPageSize(), list.size());
+            List<Evaluation> subList = start < list.size() ? list.subList(start, end) : List.of();
+            return new org.springframework.data.domain.PageImpl<>(subList, pageable, list.size());
         }
         if (activityId != null) {
             return evaluationRepository.findByActivityId(activityId, pageable);
@@ -42,7 +53,7 @@ public class EvaluationService {
         if (teacherId != null) {
             return evaluationRepository.findByTeacherId(teacherId, pageable);
         }
-        
+
         return evaluationRepository.findAll(pageable);
     }
     
@@ -80,6 +91,43 @@ public class EvaluationService {
 
         // 校验考核员权限 - 必须被分配到该活动
         validateEvaluatorPermission(evaluatorId, activityId);
+
+        // 校验活动状态
+        Activity activity = activityService.getById(activityId);
+        if (activity.getStatus() == Activity.Status.closed) {
+            throw new BusinessException("该活动已结束，无法评分");
+        }
+
+        // 校验分数范围
+        if (score == null) {
+            throw new BusinessException("评分不能为空");
+        }
+        if (score.compareTo(BigDecimal.ZERO) < 0 || score.compareTo(new BigDecimal("100")) > 0) {
+            throw new BusinessException("评分必须在 0-100 之间");
+        }
+        if (score.scale() > 1) {
+            throw new BusinessException("评分最多保留一位小数");
+        }
+
+        // 校验教师是否已完成考核内容（C级需提交考试，非C级需上传文档）
+        if (activity.getLevel() == Activity.Level.C) {
+            ExamRecord examRecord = examRecordService.getRecordByTeacherAndActivity(teacherId, activityId);
+            if (examRecord == null || examRecord.getStatus() != ExamRecord.Status.submitted) {
+                throw new BusinessException("该教师尚未完成考试，无法评分");
+            }
+        } else {
+            var docOpt = documentRepository.findFirstByActivityIdAndUserId(activityId, teacherId);
+            if (docOpt.isEmpty()) {
+                throw new BusinessException("该教师尚未上传考核文档，无法评分");
+            }
+        }
+
+        // 校验成绩是否已发布锁定
+        List<Evaluation> existingEvals = evaluationRepository.findByActivityIdAndTeacherId(activityId, teacherId);
+        boolean locked = existingEvals.stream().anyMatch(e -> Boolean.TRUE.equals(e.getIsLocked()));
+        if (locked) {
+            throw new BusinessException("该教师的成绩已发布锁定，无法修改评分");
+        }
 
         log.info("考核员 {} 为教师 {} 在活动 {} 评分: {}", evaluatorId, teacherId, activityId, score);
 
@@ -137,23 +185,47 @@ public class EvaluationService {
     public long countByStatus(Evaluation.Status status) {
         return evaluationRepository.countByStatus(status);
     }
+
+    public long countByActivityIdAndEvaluatorId(Long activityId, Long evaluatorId) {
+        return evaluationRepository.countByActivityIdAndEvaluatorId(activityId, evaluatorId);
+    }
     
+    private static final Long SYSTEM_EVALUATOR_ID = 1L;
+
     @Transactional
     public int publishScores(Long activityId, Long teacherId) {
         // 获取活动信息并校验
         Activity activity = activityService.getById(activityId);
 
-        // 校验4：考试时间结束前不得公布成绩
+        // 校验4：考试时间/材料提交时间结束前不得公布成绩
+        LocalDateTime now = LocalDateTime.now();
         if (activity.getExamEnd() != null) {
-            LocalDateTime now = LocalDateTime.now();
             if (now.isBefore(activity.getExamEnd())) {
                 throw new BusinessException("考试时间尚未结束，无法公布成绩");
             }
+        } else if (activity.getMaterialEnd() != null) {
+            if (now.isBefore(activity.getMaterialEnd())) {
+                throw new BusinessException("材料提交时间尚未结束，无法公布成绩");
+            }
         }
 
-        // 校验2：已公布成绩的考核无法再次公布
-        if (activity.getScoresPublished() != null && activity.getScoresPublished()) {
+        // 校验2：已公布成绩的考核无法再次公布（仅针对批量发布）
+        if (teacherId == null && activity.getScoresPublished() != null && activity.getScoresPublished()) {
             throw new BusinessException("该考核活动的成绩已公布，无法重复公布");
+        }
+
+        // 清理非配置评分员的历史遗留评分（排除系统参考评分）
+        List<Long> reviewerIdList = parseReviewerIds(activity.getReviewerIds());
+        if (!reviewerIdList.isEmpty()) {
+            List<Evaluation> allEvals = evaluationRepository.findByActivityId(activityId);
+            List<Evaluation> extraEvals = allEvals.stream()
+                    .filter(e -> !SYSTEM_EVALUATOR_ID.equals(e.getEvaluatorId()))
+                    .filter(e -> !reviewerIdList.contains(e.getEvaluatorId()))
+                    .toList();
+            if (!extraEvals.isEmpty()) {
+                log.warn("清理活动 {} 的非配置评分员评分记录，数量: {}", activityId, extraEvals.size());
+                evaluationRepository.deleteAll(extraEvals);
+            }
         }
 
         List<Evaluation> evaluations;
@@ -163,8 +235,9 @@ public class EvaluationService {
             evaluations = evaluationRepository.findByActivityId(activityId);
         }
 
-        // 按教师分组计算平均分
+        // 按教师分组计算平均分（排除系统参考评分）
         java.util.Map<Long, List<Evaluation>> byTeacher = evaluations.stream()
+                .filter(e -> !SYSTEM_EVALUATOR_ID.equals(e.getEvaluatorId()))
                 .collect(java.util.stream.Collectors.groupingBy(Evaluation::getTeacherId));
 
         int count = 0;
@@ -189,12 +262,46 @@ public class EvaluationService {
 
         log.info("发布成绩 - 活动: {}, 教师: {}, 发布数量: {}", activityId, teacherId, count);
 
-        // 更新活动的成绩公布状态
-        activity.setScoresPublished(true);
-        activity.setScoresPublishedAt(LocalDateTime.now());
-        activityRepository.save(activity);
+        // 仅在批量发布（teacherId == null）时更新活动的成绩公布状态
+        // 单教师发布不锁定整活动，避免其他教师成绩无法发布
+        if (teacherId == null) {
+            activity.setScoresPublished(true);
+            activity.setScoresPublishedAt(LocalDateTime.now());
+
+            // 报名时间、考试时间/材料时间都结束后自动关闭活动
+            boolean enrollmentEnded = activity.getEnrollmentEnd() == null || now.isAfter(activity.getEnrollmentEnd());
+            boolean examOrMaterialEnded;
+            if (activity.getExamEnd() != null) {
+                examOrMaterialEnded = now.isAfter(activity.getExamEnd());
+            } else if (activity.getMaterialEnd() != null) {
+                examOrMaterialEnded = now.isAfter(activity.getMaterialEnd());
+            } else {
+                examOrMaterialEnded = true;
+            }
+            if (enrollmentEnded && examOrMaterialEnded) {
+                activity.setStatus(Activity.Status.closed);
+                log.info("活动 {} 所有时间窗口已结束，自动关闭", activityId);
+            }
+
+            activityRepository.save(activity);
+        }
 
         return count;
+    }
+
+    private List<Long> parseReviewerIds(String reviewerIds) {
+        if (reviewerIds == null || reviewerIds.isEmpty()) {
+            return List.of();
+        }
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                    reviewerIds,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<Long>>() {}
+            );
+        } catch (Exception e) {
+            log.error("解析reviewerIds失败: {}", reviewerIds, e);
+            return List.of();
+        }
     }
     
     public BigDecimal calculateAverageScore(List<Evaluation> evaluations) {

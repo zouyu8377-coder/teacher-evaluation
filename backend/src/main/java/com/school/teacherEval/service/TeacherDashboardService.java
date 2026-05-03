@@ -184,6 +184,8 @@ public class TeacherDashboardService {
                         } else if (Boolean.TRUE.equals(examRecord.getIsSubmitted())) {
                             info.setExamStatus("completed");
                             info.setExamRecordId(examRecord.getId());
+                            info.setCorrectCount(examRecord.getCorrectCount());
+                            info.setWrongCount(examRecord.getWrongCount());
                         } else {
                             info.setExamStatus("in_progress");
                             info.setExamStartTime(examRecord.getStartedAt());

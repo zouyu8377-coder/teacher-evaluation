@@ -225,19 +225,32 @@ const loadExamData = async () => {
   try {
     const res = await getExamRecord(recordId.value)
     if (res.code === 200) {
-      const data = res.data
+      const data = res.data as any
       Object.assign(paperInfo, data.paper)
       questions.value = data.questions
-      
+
       // 加载已有答案
       for (const q of data.questions) {
         if (q.userAnswer) {
           answers[q.order] = q.userAnswer
         }
       }
-      
-      // 启动计时器
+
+      // 考试进行中时校验时间窗口
       if (data.record.status === 'in_progress') {
+        const activityRes = await getActivityById(data.record.activityId)
+        if (activityRes.code === 200) {
+          const activity = activityRes.data
+          const now = new Date()
+          const examEnd = activity.examEnd ? new Date(activity.examEnd) : null
+          if (examEnd && now > examEnd) {
+            ElMessage.error('考试时间已结束，无法继续作答')
+            examStarted.value = false
+            router.push('/teacher/enrollment')
+            return
+          }
+        }
+
         const started = new Date(data.record.startedAt).getTime()
         const used = Math.floor((Date.now() - started) / 1000)
         remainingTime.value = paperInfo.durationMinutes * 60 - used
@@ -254,12 +267,13 @@ const loadExamData = async () => {
         examResult.correctCount = data.record.correctCount
         examResult.wrongCount = data.record.wrongCount
         examResult.submittedAt = data.record.submittedAt
-        
+
         // 加载答题详情
         const detailRes = await getExamRecordDetail(recordId.value)
         if (detailRes.code === 200) {
-          questions.value = detailRes.data.questions
-          for (const q of detailRes.data.questions) {
+          const detailData = detailRes.data as any
+          questions.value = detailData.questions
+          for (const q of detailData.questions) {
             if (q.userAnswer) {
               answers[q.order] = q.userAnswer
             }
@@ -343,19 +357,40 @@ const formatDateTime = (datetime: string) => {
 }
 
 onMounted(async () => {
+  const routeRecordId = Number(route.query.recordId)
+  if (routeRecordId) {
+    recordId.value = routeRecordId
+    examStarted.value = true
+    loadExamData()
+    return
+  }
+
   if (!activityId) {
     ElMessage.error('参数错误')
     router.push('/teacher/enrollment')
     return
   }
-  
-  // 检查活动是否有试卷
+
+  // 检查活动是否有试卷及是否在考试窗口内
   try {
     const res = await getActivityById(activityId)
     if (res.code === 200) {
       const activity = res.data
       if (!activity.hasExam || !activity.examPaperId) {
         ElMessage.error('该活动没有关联试卷')
+        router.push('/teacher/enrollment')
+        return
+      }
+      const now = new Date()
+      const examStart = activity.examStart ? new Date(activity.examStart) : null
+      const examEnd = activity.examEnd ? new Date(activity.examEnd) : null
+      if (examStart && now < examStart) {
+        ElMessage.error('考试尚未开始')
+        router.push('/teacher/enrollment')
+        return
+      }
+      if (examEnd && now > examEnd) {
+        ElMessage.error('考试时间已结束')
         router.push('/teacher/enrollment')
         return
       }

@@ -7,7 +7,7 @@ package-lock.json
 yarn.lock
 
 # Build output
-dist/
+# dist/     # 保留：宿主机预构建dist需打包进镜像
 build/
 
 # Git

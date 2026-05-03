@@ -12,7 +12,7 @@
       <div v-if="currentActivity?.level === 'C'" class="exam-info-section">
         <el-alert type="info" :closable="false" class="mb-3">
           <template #title>
-            <span>C级考核为考试形式，已自动计算客观分数，可在此基础上调整</span>
+            <span>C级考核为考试形式，已自动计算客观分数。最终成绩以本页提交的评分为准（多评分人取平均分）。</span>
           </template>
         </el-alert>
 
@@ -81,7 +81,10 @@
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" :loading="loading" @click="handleSubmit">提交评分</el-button>
+          <el-alert v-if="scoresPublished" type="warning" :closable="false" style="margin-bottom: 12px; width: 100%;">
+            该活动成绩已发布，不可再修改评分。
+          </el-alert>
+          <el-button type="primary" :loading="loading" @click="handleSubmit" :disabled="scoresPublished">提交评分</el-button>
         </el-form-item>
       </el-form>
 
@@ -102,8 +105,9 @@
 import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 import { submitEvaluation, getEvaluationList } from '@/api/evaluation'
-import { getActivityList } from '@/api/activity'
+import { getActivityList, getActivityById } from '@/api/activity'
 import { getTeachers } from '@/api/user'
 import { getExamRecordsByActivity } from '@/api/exam'
 import { getTeacherDocuments } from '@/api/document'
@@ -113,6 +117,7 @@ const router = useRouter()
 const teacherId = computed(() => Number(route.params.teacherId))
 const activityId = computed(() => route.query.activityId ? Number(route.query.activityId) : null)
 const teacherName = ref('')
+const userStore = useUserStore()
 
 const formRef = ref()
 const loading = ref(false)
@@ -134,6 +139,7 @@ const historyData = ref<any[]>([])
 const currentActivity = ref<any>(null)
 const examRecord = ref<any>(null)
 const document = ref<any>(null)
+const scoresPublished = ref(false)
 
 const currentActivityId = computed(() => form.activityId || activityId.value)
 
@@ -155,7 +161,7 @@ const loadExamRecord = async () => {
   if (!currentActivityId.value) return
   const res = await getExamRecordsByActivity(currentActivityId.value, 1, 20)
   if (res.code === 200) {
-    const record = res.data.content.find((r: any) => r.teacherId === teacherId.value)
+    const record = res.data.records.find((r: any) => r.teacherId === teacherId.value)
     if (record) {
       examRecord.value = record
       // C级考核默认使用考试得分
@@ -167,8 +173,8 @@ const loadExamRecord = async () => {
 const loadDocument = async () => {
   if (!currentActivityId.value) return
   const res = await getTeacherDocuments(teacherId.value, currentActivityId.value)
-  if (res.code === 200 && res.data.content.length > 0) {
-    document.value = res.data.content[0]
+  if (res.code === 200 && res.data.records.length > 0) {
+    document.value = res.data.records[0]
   } else {
     document.value = null
   }
@@ -207,13 +213,45 @@ const loadActivities = async () => {
       const activity = activities.value.find(a => a.id === activityId.value)
       currentActivity.value = activity
       if (activity) {
+        // 检查成绩是否已发布
+        try {
+          const detailRes = await getActivityById(activity.id)
+          if (detailRes.code === 200) {
+            scoresPublished.value = detailRes.data.scoresPublished || false
+          }
+        } catch (e) {
+          scoresPublished.value = false
+        }
         if (activity.level === 'C') {
           await loadExamRecord()
         } else {
           await loadDocument()
         }
+        // 加载当前考核员对该教师的已有评分（避免重置为默认值）
+        await loadMyScore()
       }
     }
+  }
+}
+
+const loadMyScore = async () => {
+  if (!currentActivityId.value || !teacherId.value) return
+  try {
+    const res = await getEvaluationList({
+      activityId: currentActivityId.value,
+      teacherId: teacherId.value,
+      page: 1,
+      size: 100
+    })
+    if (res.code === 200 && res.data?.records) {
+      const myId = userStore.user?.id
+      const myEval = res.data.records.find((e: any) => e.evaluatorId === myId)
+      if (myEval && myEval.score !== undefined && myEval.score !== null) {
+        form.score = myEval.score
+      }
+    }
+  } catch (e) {
+    // 忽略加载失败，使用默认值
   }
 }
 
@@ -251,7 +289,7 @@ const handleSubmit = async () => {
     })
     if (res.code === 200) {
       ElMessage.success('提交成功')
-      router.push('/evaluator/activities')
+      router.push({ path: '/evaluator/activities', query: { activityId: form.activityId } })
     }
   } catch (e) {
     // error handled by interceptor

@@ -60,7 +60,7 @@ const dialogVisible = ref(false)
 const currentRow = ref<any>(null)
 
 const loadData = async () => {
-  const res = await getMyScores({ activityId: query.activityId || undefined })
+  const res = await getMyScores()
   if (res.code === 200) {
     tableData.value = res.data
   }

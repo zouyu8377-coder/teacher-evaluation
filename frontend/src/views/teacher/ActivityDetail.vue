@@ -80,11 +80,23 @@
           </div>
         </template>
 
-        <template v-else-if="examRecord && !scorePublished">
+        <template v-else-if="examRecord.status === 'in_progress'">
+          <div class="action-prompt">
+            <p class="prompt-text">您有正在进行的考试</p>
+            <el-button type="warning" size="large" @click="continueExam">
+              <span class="material-symbols-outlined" style="font-size: 18px; margin-right: 8px;">play_arrow</span>
+              继续考试
+            </el-button>
+          </div>
+        </template>
+
+        <template v-else>
           <div class="exam-completed">
             <div class="exam-status">
-              <span class="material-symbols-outlined" style="color: #d97706;">hourglass_empty</span>
-              <span>考试已完成，等待评分中</span>
+              <span class="material-symbols-outlined" :style="{ color: scorePublished ? '#16a34a' : '#d97706' }">
+                {{ scorePublished ? 'check_circle' : 'hourglass_empty' }}
+              </span>
+              <span>{{ scorePublished ? '考核已完成' : '考试已完成，等待评分中' }}</span>
             </div>
             <div class="exam-info">
               <div class="info-row">
@@ -95,27 +107,16 @@
                 <span class="label">考试得分</span>
                 <span class="value exam-score">{{ examRecord.score }}分</span>
               </div>
-            </div>
-          </div>
-        </template>
-
-        <template v-else-if="scorePublished">
-          <div class="score-card">
-            <div class="score-header">
-              <span class="score-label">最终得分</span>
-              <span class="score-value" :class="getScoreClass(enrollment?.finalScore)">
-                {{ enrollment?.finalScore }}
-              </span>
-            </div>
-            <div class="score-detail">
-              <div class="detail-item">
-                <span class="label">考试得分</span>
-                <span class="value">{{ examRecord.score }}分</span>
+              <div v-if="scorePublished" class="info-row">
+                <span class="label">最终得分</span>
+                <span class="value exam-score">{{ enrollment?.finalScore }}分</span>
               </div>
-              <div v-if="enrollment?.comment" class="detail-item full-width">
-                <span class="label">评语</span>
-                <span class="value">{{ enrollment.comment }}</span>
-              </div>
+            </div>
+            <div style="margin-top: 16px; text-align: center;">
+              <el-button type="primary" @click="viewExamResult">
+                <span class="material-symbols-outlined" style="font-size: 18px; margin-right: 8px;">visibility</span>
+                成绩查询
+              </el-button>
             </div>
           </div>
         </template>
@@ -256,6 +257,7 @@ import { ElMessage } from 'element-plus'
 import { getActivityById, getEnrollmentInfo } from '@/api/activity'
 import { getMaterialList, downloadMaterial as downloadMaterialApi } from '@/api/learningMaterial'
 import { getDocumentList, uploadDocument, downloadDocument as downloadDocApi } from '@/api/document'
+import { getMyExamRecords } from '@/api/exam'
 
 const route = useRoute()
 const router = useRouter()
@@ -289,8 +291,9 @@ const activityStatus = computed(() => {
 
   // C级 - 考试
   if (activity.value?.level === 'C') {
-    if (examRecord.value) return 'exam-completed'
-    return 'pending-exam'
+    if (!examRecord.value) return 'pending-exam'
+    if (examRecord.value.status === 'in_progress') return 'exam-in-progress'
+    return 'exam-completed'
   }
 
   // 非C级 - 文档
@@ -337,7 +340,7 @@ const loadData = async () => {
 
   try {
     // 获取活动详情
-    const activityRes = await getActivityById(activityId)
+    const activityRes = await getActivityById(Number(activityId))
     if (activityRes.code === 200) {
       activity.value = activityRes.data
     }
@@ -356,6 +359,13 @@ const loadData = async () => {
     // 获取我的文档
     loadMyDocument(parseInt(activityId))
 
+    // 获取我的考试记录
+    const examRes = await getMyExamRecords()
+    if (examRes.code === 200) {
+      const records = examRes.data || []
+      examRecord.value = records.find((r: any) => r.activityId === parseInt(activityId)) || null
+    }
+
   } catch (e) {
     console.error('获取活动信息失败', e)
     ElMessage.error('获取活动信息失败')
@@ -367,7 +377,7 @@ const loadData = async () => {
 const loadMaterials = async (activityId: number) => {
   materialsLoading.value = true
   try {
-    const res = await getMaterialList({ activityId, size: 100 })
+    const res = await getMaterialList({ periodId: activityId, size: 100 })
     if (res.code === 200) {
       materials.value = res.data?.records || []
     }
@@ -397,10 +407,18 @@ const startExam = () => {
   router.push({ path: '/teacher/exam', query: { activityId: route.params.id } })
 }
 
+const continueExam = () => {
+  router.push({ path: '/teacher/exam', query: { activityId: route.params.id, recordId: examRecord.value.id } })
+}
+
+const viewExamResult = () => {
+  router.push({ path: '/teacher/exam', query: { recordId: examRecord.value.id } })
+}
+
 const downloadDocument = async (doc: any) => {
   try {
     const res = await downloadDocApi(doc.id)
-    const url = window.URL.createObjectURL(new Blob([res]))
+    const url = window.URL.createObjectURL(new Blob([res as unknown as BlobPart]))
     const link = document.createElement('a')
     link.href = url
     link.download = doc.fileName
@@ -416,7 +434,7 @@ const downloadDocument = async (doc: any) => {
 const downloadMaterial = async (row: any) => {
   try {
     const res = await downloadMaterialApi(row.id)
-    const url = window.URL.createObjectURL(new Blob([res]))
+    const url = window.URL.createObjectURL(new Blob([res as unknown as BlobPart]))
     const link = document.createElement('a')
     link.href = url
     link.download = row.fileName

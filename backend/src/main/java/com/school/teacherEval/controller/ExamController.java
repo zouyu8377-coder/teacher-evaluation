@@ -292,12 +292,13 @@ public class ExamController {
                 return ApiResponse.error(403, "权限不足");
             }
         }
-        return ApiResponse.success(recordService.getExamDetail(id));
+        boolean isEvaluatorOrAdmin = user.getRole() == User.Role.evaluator || user.getRole() == User.Role.admin;
+        return ApiResponse.success(recordService.getExamDetail(id, user.getId(), isEvaluatorOrAdmin));
     }
     
     @PostMapping("/records/{id}/adjust")
     @Operation(summary = "人工调整分数")
-    @PreAuthorize("hasRole('evaluator') or hasRole('admin')")
+    @PreAuthorize("hasRole('admin')")
     public ApiResponse<ExamRecord> adjustScore(
             @PathVariable Long id,
             @RequestParam java.math.BigDecimal adjust) {

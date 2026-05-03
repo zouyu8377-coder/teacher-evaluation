@@ -3,11 +3,12 @@
  * 提供统一的日志记录功能，支持日志级别和格式化输出
  */
 
-enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3
+type LogLevel = 0 | 1 | 2 | 3
+const LogLevel = {
+  DEBUG: 0 as 0,
+  INFO: 1 as 1,
+  WARN: 2 as 2,
+  ERROR: 3 as 3
 }
 
 const levelNames = ['DEBUG', 'INFO', 'WARN', 'ERROR']

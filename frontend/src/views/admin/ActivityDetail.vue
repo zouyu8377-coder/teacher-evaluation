@@ -126,8 +126,7 @@
           </el-button>
         </div>
         <div class="reviewer-info">
-          <el-tag type="info">参与教师：{{ reviewProgress.enrolledCount || 0 }} 人</el-tag>
-          <el-tag type="info" style="margin-left: 8px;">评分人数：{{ reviewProgress.reviewerCount || 0 }} 人</el-tag>
+          <el-tag type="info">评分人数：{{ reviewProgress.reviewerCount || 0 }} 人</el-tag>
           <span v-if="selectedReviewerNames.length > 0" style="margin-left: 12px; color: #64748b;">
             {{ selectedReviewerNames.join('、') }}
           </span>
@@ -231,6 +230,9 @@
         <h3 class="section-title">
           <span class="material-symbols-outlined">people</span>
           已报名教师
+          <el-tag v-if="configuredReviewerIds.length > 0" type="info" size="small" style="margin-left: 12px;">
+            配置评分员: {{ configuredReviewerIds.length }} 人
+          </el-tag>
         </h3>
         <el-table :data="enrolledTeachers" stripe v-loading="enrolledLoading">
           <el-table-column prop="id" label="ID" width="60" />
@@ -239,6 +241,30 @@
           <el-table-column prop="enrolledAt" label="报名时间">
             <template #default="{ row }">
               {{ formatDateTime(row.enrolledAt) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="各评分员打分" min-width="220">
+            <template #default="{ row }">
+              <div v-if="row.evaluations && row.evaluations.length > 0" class="eval-tags">
+                <el-tag v-for="ev in row.evaluations" :key="ev.id" size="small" type="info" style="margin: 2px;">
+                  {{ ev.evaluatorName }}: {{ ev.score }}
+                </el-tag>
+              </div>
+              <span v-else class="text-muted">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="评分进度" width="120">
+            <template #default="{ row }">
+              <span v-if="configuredReviewerIds.length > 0">
+                {{ row.evaluations ? row.evaluations.length : 0 }} / {{ configuredReviewerIds.length }}
+              </span>
+              <span v-else class="text-muted">未配置</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="平均分" width="100">
+            <template #default="{ row }">
+              <el-tag v-if="row.averageScore !== undefined && row.averageScore !== null" type="success">{{ row.averageScore }}</el-tag>
+              <span v-else class="text-muted">-</span>
             </template>
           </el-table-column>
         </el-table>
@@ -388,10 +414,11 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getActivityById, getActivityEnrollments, updateActivity, updateReviewerConfig, getReviewProgress } from '@/api/activity'
-import { publishEvaluationScores } from '@/api/evaluation'
+import { publishEvaluationScores, getTeacherActivityEvaluations } from '@/api/evaluation'
 import { getEvaluators } from '@/api/user'
 import { getPapersByPeriod } from '@/api/exam'
 import { getMaterialList, uploadMaterial, deleteMaterial, downloadMaterial as downloadApi } from '@/api/learningMaterial'
+import type { Activity } from '@/api/types'
 
 const route = useRoute()
 const loading = ref(true)
@@ -422,6 +449,16 @@ const selectedReviewerNames = computed(() => {
   }
 })
 
+// 当前活动配置的评分员ID列表
+const configuredReviewerIds = computed(() => {
+  if (!activity.value?.reviewerIds) return []
+  try {
+    return JSON.parse(activity.value.reviewerIds) as number[]
+  } catch {
+    return []
+  }
+})
+
 // 学习资料相关
 const materials = ref<any[]>([])
 const materialsLoading = ref(false)
@@ -442,7 +479,8 @@ const editLoading = ref(false)
 const editFormRef = ref()
 const editForm = ref({
   name: '',
-  level: '',
+  level: '' as Activity['level'],
+  status: '' as Activity['status'],
   maxParticipants: 0,
   enrollmentStart: '',
   enrollmentEnd: '',
@@ -533,12 +571,13 @@ const loadData = async () => {
   const activityId = route.params.id
   loading.value = true
   try {
-    const res = await getActivityById(activityId as string)
+    const id = Number(activityId)
+    const res = await getActivityById(id)
     if (res.code === 200) {
       activity.value = res.data
       selectedPaperId.value = res.data.examPaperId || null
       // 加载已报名教师
-      loadEnrollments(activityId as string)
+      loadEnrollments(id)
       // 加载学习资料
       loadMaterials()
       // 加载评分进度
@@ -561,7 +600,7 @@ const loadPapers = async () => {
   try {
     const res = await getPapersByPeriod()
     if (res.code === 200) {
-      papers.value = res.data?.content || []
+      papers.value = res.data?.records || []
     }
   } catch (e) {
     console.error('获取试卷列表失败', e)
@@ -573,7 +612,7 @@ const handlePaperChange = async (paperId: number | null) => {
   try {
     // 同时设置 hasExam 为 true（如果有试卷）或 false（如果没有试卷）
     const hasExam = paperId !== null
-    await updateActivity(activity.value.id, { examPaperId: paperId, hasExam })
+    await updateActivity(activity.value.id, { examPaperId: paperId ?? undefined, hasExam })
     ElMessage.success('试卷配置已保存')
     // 刷新活动数据
     loadData()
@@ -663,7 +702,7 @@ const handleReviewerSubmit = async () => {
   }
 }
 
-const handleToggleStatus = async (newStatus: string) => {
+const handleToggleStatus = async (newStatus: Activity['status']) => {
   if (!activity.value) return
   try {
     await updateActivity(activity.value.id, { status: newStatus })
@@ -676,12 +715,25 @@ const handleToggleStatus = async (newStatus: string) => {
   }
 }
 
-const loadEnrollments = async (activityId: string) => {
+const loadEnrollments = async (activityId: number) => {
   enrolledLoading.value = true
   try {
     const res = await getActivityEnrollments(activityId)
     if (res.code === 200) {
-      enrolledTeachers.value = res.data || []
+      const teachers = (res.data || []) as any[]
+      // 为每个教师获取评分详情
+      for (const teacher of teachers) {
+        try {
+          const evalRes = await getTeacherActivityEvaluations(Number(activityId), teacher.id)
+          if (evalRes.code === 200) {
+            teacher.evaluations = evalRes.data.evaluations || []
+            teacher.averageScore = evalRes.data.averageScore
+          }
+        } catch (e) {
+          teacher.evaluations = []
+        }
+      }
+      enrolledTeachers.value = teachers
     }
   } catch (e) {
     console.error('获取报名列表失败', e)
@@ -694,7 +746,7 @@ const loadMaterials = async () => {
   if (!activity.value?.id) return
   materialsLoading.value = true
   try {
-    const res = await getMaterialList({ activityId: activity.value.id, size: 100 })
+    const res = await getMaterialList({ periodId: activity.value.id, size: 100 })
     if (res.code === 200) {
       materials.value = res.data?.records || []
     }

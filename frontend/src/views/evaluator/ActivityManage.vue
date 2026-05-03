@@ -94,7 +94,8 @@
                 <template v-else>
                   <el-button type="primary" link @click="viewDocuments(row)" v-if="row.submittedAt">查看文档</el-button>
                 </template>
-                <el-button type="success" link @click="goEvaluate(row)">打分</el-button>
+                <el-button type="success" link @click="goEvaluate(row)" v-if="!selectedActivity.scoresPublished">打分</el-button>
+                <el-tag v-else type="info" size="small">成绩已发布</el-tag>
               </div>
             </template>
           </el-table-column>
@@ -103,14 +104,11 @@
 
         <el-divider />
 
-        <div class="actions" v-if="selectedActivity && !selectedActivity.scoresPublished">
-          <el-button type="primary" @click="publishScores" :loading="publishLoading" :disabled="reviewStatus !== '评分完成'">公布成绩</el-button>
-          <span v-if="reviewStatus && reviewStatus !== '评分完成'" style="margin-left: 12px; color: #999;">
-            {{ reviewStatus === '待评分' || reviewStatus === '未配置' ? '评分尚未开始' : '等待所有评分人完成评分' }}
+        <div class="actions" v-if="selectedActivity">
+          <el-tag v-if="selectedActivity.scoresPublished" type="success">成绩已公布</el-tag>
+          <span v-else style="color: #999;">
+            {{ reviewStatus === '待评分' || reviewStatus === '未配置' ? '评分尚未开始' : reviewStatus === '评分中' ? '等待所有评分人完成评分' : '等待管理员发布成绩' }}
           </span>
-        </div>
-        <div class="actions" v-else-if="selectedActivity && selectedActivity.scoresPublished">
-          <el-tag type="success">成绩已公布</el-tag>
         </div>
       </template>
     </el-card>
@@ -159,16 +157,18 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 import { getActiveActivities, getActivityEnrollments, getReviewProgress } from '@/api/activity'
 import { getExamRecordDetail } from '@/api/exam'
-import { getTeacherActivityEvaluations, publishEvaluationScores } from '@/api/evaluation'
+import { getTeacherActivityEvaluations } from '@/api/evaluation'
 
+const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const loading = ref(false)
 const teacherLoading = ref(false)
-const publishLoading = ref(false)
 const activities = ref<any[]>([])
 const enrolledTeachers = ref<any[]>([])
 const selectedActivity = ref<any>(null)
@@ -234,9 +234,9 @@ const loadActivities = async () => {
 
       // 排序：按报名开始时间从旧到新，已过报名截止的放在最后
       const statusOrder = { active: 0, pending: 1, ended: 2 }
-      activitiesWithCount.sort((a, b) => {
+      activitiesWithCount.sort((a: any, b: any) => {
         // 先按状态排序（报名中 > 未开始 > 已结束）
-        const statusDiff = statusOrder[a.enrollmentStatus] - statusOrder[b.enrollmentStatus]
+        const statusDiff = statusOrder[a.enrollmentStatus as keyof typeof statusOrder] - statusOrder[b.enrollmentStatus as keyof typeof statusOrder]
         if (statusDiff !== 0) return statusDiff
         // 同状态内按报名开始时间排序
         const aTime = a.enrollmentStart ? new Date(a.enrollmentStart).getTime() : 0
@@ -257,12 +257,13 @@ const selectActivity = async (activity: any) => {
   try {
     const res = await getActivityEnrollments(activity.id)
     if (res.code === 200) {
-      // 获取每个教师的评分
-      const teachers = res.data
+      // 获取每个教师的评分（仅当前考核员自己的打分）
+      const teachers = res.data as any[]
       for (const teacher of teachers) {
         const scoreRes = await getTeacherActivityEvaluations(activity.id, teacher.id)
-        if (scoreRes.code === 200 && scoreRes.data.records && scoreRes.data.records.length > 0) {
-          teacher.score = scoreRes.data.records[0].score
+        if (scoreRes.code === 200 && scoreRes.data.evaluations && scoreRes.data.evaluations.length > 0) {
+          const myEval = scoreRes.data.evaluations.find((e: any) => e.evaluatorId === userStore.user?.id)
+          teacher.score = myEval ? myEval.score : undefined
         }
       }
       enrolledTeachers.value = teachers
@@ -305,35 +306,16 @@ const goEvaluate = (row: any) => {
   router.push(`/evaluator/evaluate/${row.id}?activityId=${selectedActivity.value.id}`)
 }
 
-const publishScores = async () => {
-  if (!selectedActivity.value) {
-    ElMessage.warning('请先选择考核活动')
-    return
-  }
 
-  // 检查是否已公布
-  if (selectedActivity.value.scoresPublished) {
-    ElMessage.warning('该考核的成绩已公布，无法重复公布')
-    return
-  }
-
-  await ElMessageBox.confirm('确定要公布这次考核中所有已打分的成绩吗？公布后教师可查看。', '提示', { type: 'warning' })
-
-  publishLoading.value = true
-  try {
-    const res = await publishEvaluationScores(selectedActivity.value.id)
-    if (res.code === 200) {
-      ElMessage.success('成绩已公布')
-      // 更新本地状态
-      selectedActivity.value.scoresPublished = true
+onMounted(async () => {
+  await loadActivities()
+  const queryActivityId = route.query.activityId ? Number(route.query.activityId) : null
+  if (queryActivityId) {
+    const activity = activities.value.find(a => a.id === queryActivityId)
+    if (activity) {
+      await selectActivity(activity)
     }
-  } finally {
-    publishLoading.value = false
   }
-}
-
-onMounted(() => {
-  loadActivities()
 })
 </script>
 

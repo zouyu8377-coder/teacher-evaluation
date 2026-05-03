@@ -106,6 +106,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getPaperById, getPaperQuestions, setPaperQuestions, getQuestions } from '@/api/exam'
+import type { ExamQuestion } from '@/api/exam'
 
 const route = useRoute()
 const router = useRouter()
@@ -146,8 +147,9 @@ const loadPaperInfo = async () => {
     if (res.code === 200) {
       paperInfo.value = res.data
       // 设置活动ID用于加载题目
-      if (res.data.activityId) {
-        questionQuery.value.activityId = res.data.activityId
+      const data = res.data as any
+      if (data.activityId || data.periodId) {
+        questionQuery.value.activityId = data.activityId || data.periodId
       }
     }
   } finally {
@@ -162,7 +164,7 @@ const loadSelectedQuestions = async () => {
       id: pq.id,
       questionId: pq.questionId,
       questionText: pq.question?.questionText || '',
-      questionType: pq.question?.questionType || 'single',
+      questionType: (pq.question?.questionType as ExamQuestion['questionType']) || 'single',
       score: pq.question?.score || 0,
       questionOrder: pq.questionOrder
     }))
@@ -177,15 +179,15 @@ const loadQuestions = async () => {
   questionLoading.value = true
   try {
     const res = await getQuestions({
-      activityId: questionQuery.value.activityId,
-      type: questionQuery.value.type || undefined,
+      periodId: questionQuery.value.activityId!,
+      type: (questionQuery.value.type || undefined) as ExamQuestion['questionType'],
       difficulty: questionQuery.value.difficulty || undefined,
       page: questionQuery.value.page,
       size: questionQuery.value.size
     })
     if (res.code === 200) {
-      questionList.value = res.data.content
-      questionTotal.value = res.data.totalElements
+      questionList.value = res.data.records
+      questionTotal.value = res.data.total
     }
   } finally {
     questionLoading.value = false

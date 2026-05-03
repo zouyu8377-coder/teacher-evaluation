@@ -49,6 +49,17 @@ public class JwtUtil {
             return false;
         }
     }
+
+    /**
+     * 获取 Token 的过期时间
+     */
+    public Date getExpirationDateFromToken(String token) {
+        try {
+            return getClaimsFromToken(token).getExpiration();
+        } catch (Exception e) {
+            return null;
+        }
+    }
     
     private Claims getClaimsFromToken(String token) {
         return Jwts.parser()

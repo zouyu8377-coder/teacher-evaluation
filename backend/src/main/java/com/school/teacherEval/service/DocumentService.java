@@ -8,6 +8,7 @@ import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.GetObjectArgs;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -17,13 +18,30 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DocumentService {
-    
+
+    // 允许上传的文件扩展名白名单
+    private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList(
+        ".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".zip"
+    );
+    // 允许上传的 MIME 类型白名单（仅作辅助校验，以扩展名为主）
+    private static final List<String> ALLOWED_CONTENT_TYPES = Arrays.asList(
+        "application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "image/jpeg", "image/png", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "text/plain", "application/zip"
+    );
+    // 最大文件大小 50MB
+    private static final long MAX_FILE_SIZE = 50 * 1024 * 1024;
+
     private final DocumentRepository documentRepository;
     private final MinioConfig minioConfig;
     private final EnrollmentService enrollmentService;
@@ -59,38 +77,66 @@ public class DocumentService {
         if (!enrollmentService.isEnrolledByActivity(activityId, userId)) {
             throw new RuntimeException("您尚未报名该活动，无法上传文档");
         }
-        
+
+        // 文件大小校验
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new RuntimeException("文件大小超过限制（最大50MB）");
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || originalFilename.isBlank()) {
+            throw new RuntimeException("文件名不能为空");
+        }
+
+        // 获取并校验扩展名
+        String extension = "";
+        int lastDotIndex = originalFilename.lastIndexOf('.');
+        if (lastDotIndex > 0 && lastDotIndex < originalFilename.length() - 1) {
+            extension = originalFilename.substring(lastDotIndex).toLowerCase();
+        }
+        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+            throw new RuntimeException("不支持的文件类型，仅允许: " + String.join(", ", ALLOWED_EXTENSIONS));
+        }
+
+        // MIME 类型辅助校验（客户端可伪造，不能完全依赖）
+        String contentType = file.getContentType();
+        if (contentType != null && !ALLOWED_CONTENT_TYPES.contains(contentType)) {
+            log.warn("文件 {} 的 MIME 类型 {} 不在白名单中，但仍允许上传（以扩展名校验为主）", originalFilename, contentType);
+        }
+
+        // 文件名安全检查：去除路径穿越字符，保留安全字符
+        String safeFileName = originalFilename.replaceAll("[^\\w\\u4e00-\\u9fa5\\-\\.]", "_");
+        if (safeFileName.length() > 200) {
+            safeFileName = safeFileName.substring(0, 200);
+        }
+
         String bucketName = minioConfig.getBucketName();
         MinioClient minioClient = minioConfig.minioClient();
-        
+
         if (!minioClient.bucketExists(io.minio.BucketExistsArgs.builder().bucket(bucketName).build())) {
             minioClient.makeBucket(io.minio.MakeBucketArgs.builder().bucket(bucketName).build());
         }
-        
-        String originalFilename = file.getOriginalFilename();
-        String extension = "";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        }
+
+        // 使用随机 UUID 作为对象名，避免文件名冲突和路径穿越
         String filePath = "documents/" + userId + "/" + UUID.randomUUID() + extension;
-        
+
         minioClient.putObject(PutObjectArgs.builder()
                 .bucket(bucketName)
                 .object(filePath)
                 .stream(file.getInputStream(), file.getSize(), -1)
-                .contentType(file.getContentType())
+                .contentType(contentType != null ? contentType : "application/octet-stream")
                 .build());
-        
+
         Document document = new Document();
         document.setUserId(userId);
         document.setActivityId(activityId);
         document.setTitle(title);
         document.setFilePath(filePath);
-        document.setFileName(originalFilename);
+        document.setFileName(safeFileName);
         document.setFileSize(file.getSize());
-        document.setFileType(file.getContentType());
+        document.setFileType(contentType != null ? contentType : "application/octet-stream");
         document.setDescription(description);
-        
+
         return documentRepository.save(document);
     }
     
@@ -129,6 +175,8 @@ public class DocumentService {
                     .object(document.getFilePath())
                     .build());
         } catch (Exception e) {
+            log.error("MinIO 删除文件失败, documentId={}, filePath={}", id, document.getFilePath(), e);
+            // 不抛出异常：数据库已标记删除，对象存储文件可后续通过定时任务清理
         }
     }
     

@@ -48,51 +48,57 @@ services:
     image: teacher-eval-cn-beijing.cr.volces.com/teacher-eval/minio:RELEASE.2024-01-16T16-07-38Z
     container_name: teacher-eval-minio
     restart: unless-stopped
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+    env_file:
+      - .env
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - ./data/minio:/data
     command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD-SHELL", "echo > /dev/tcp/127.0.0.1/9000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - teacher-eval-network
 
   # Backend 后端服务
   backend:
-    image: teacher-eval-cn-beijing.cr.volces.com/teacher-eval/teacher-eval-backend:1.005
+    image: teacher-eval-cn-beijing.cr.volces.com/teacher-eval/teacher-eval-backend:1.1.7
     container_name: teacher-eval-backend
     restart: unless-stopped
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     environment:
-      SPRING_PROFILES_ACTIVE: prod
       # 使用服务名连接，Docker Compose DNS 会自动解析
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/teacher_eval?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root123
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET_NAME: teacher-eval
-      TZ: Asia/Shanghai
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       - teacher-eval-network
 
   # Frontend 前端服务
   frontend:
-    image: teacher-eval-cn-beijing.cr.volces.com/teacher-eval/teacher-eval-frontend:1.005
+    image: teacher-eval-cn-beijing.cr.volces.com/teacher-eval/teacher-eval-frontend:1.1.7
     container_name: teacher-eval-frontend
     restart: unless-stopped
     ports:

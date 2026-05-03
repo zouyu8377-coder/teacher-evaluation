@@ -9,7 +9,7 @@ export interface LevelPassedCount {
 }
 
 export const getLevelPassedCount = () => {
-  return request.get<{ code: number; data: LevelPassedCount }>('/stats/level-passed')
+  return request.get('/stats/level-passed') as Promise<{ code: number; data: LevelPassedCount }>
 }
 
 export interface ActivityInfo {
@@ -23,5 +23,5 @@ export interface ActivityInfo {
 }
 
 export const getActiveActivities = () => {
-  return request.get<{ code: number; data: ActivityInfo[] }>('/stats/active-activities')
+  return request.get('/stats/active-activities') as Promise<{ code: number; data: ActivityInfo[] }>
 }

@@ -15,8 +15,11 @@ import com.school.teacherEval.service.UserService;
 import com.school.teacherEval.service.EvaluationService;
 import com.school.teacherEval.service.ExamRecordService;
 import com.school.teacherEval.service.DocumentService;
-import com.school.teacherEval.repository.EvaluationRepository;
-import com.school.teacherEval.repository.DocumentRepository;
+import com.school.teacherEval.vo.EnrollmentInfoVO;
+import com.school.teacherEval.vo.EnrollmentTeacherVO;
+import com.school.teacherEval.vo.MyEnrollmentVO;
+import com.school.teacherEval.vo.ReviewProgressVO;
+import com.school.teacherEval.vo.ReviewerStatVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,8 +29,6 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -42,8 +43,6 @@ public class ActivityController {
     private final EvaluationService evaluationService;
     private final ExamRecordService examRecordService;
     private final DocumentService documentService;
-    private final EvaluationRepository evaluationRepository;
-    private final DocumentRepository documentRepository;
 
     private User getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -86,66 +85,45 @@ public class ActivityController {
     }
 
     @GetMapping(value = "/my-enrollments", produces = "application/json;charset=UTF-8")
-    public ApiResponse<List<Map<String, Object>>> getMyEnrollments() {
+    public ApiResponse<List<MyEnrollmentVO>> getMyEnrollments() {
         User user = getCurrentUser();
         Long teacherId = user.getId();
         List<PeriodEnrollment> enrollments = enrollmentService.getTeacherEnrollments(teacherId);
-        List<Map<String, Object>> result = enrollments.stream()
+        List<MyEnrollmentVO> result = enrollments.stream()
             .filter(e -> e.getStatus() == PeriodEnrollment.Status.enrolled)
             .map(e -> {
-                Map<String, Object> map = new HashMap<>();
-                map.put("id", e.getId());
-                map.put("activityId", e.getActivityId());
-                map.put("enrolledAt", e.getEnrolledAt());
                 Activity activity = activityService.getById(e.getActivityId());
-                map.put("activityName", activity.getName());
-                map.put("level", activity.getLevel());
-                map.put("hasExam", activity.getHasExam());
-                map.put("startDate", activity.getStartDate());
-                map.put("endDate", activity.getEndDate());
-                // 考试/材料时间
-                map.put("examStart", activity.getExamStart());
-                map.put("examEnd", activity.getExamEnd());
-                map.put("materialStart", activity.getMaterialStart());
-                map.put("materialEnd", activity.getMaterialEnd());
-
-                // 查询考试记录
                 ExamRecord examRecord = examRecordService.getRecordByTeacherAndActivity(teacherId, e.getActivityId());
-                if (examRecord != null) {
-                    map.put("examRecordId", examRecord.getId());
-                    map.put("examScore", examRecord.getScore());
-                    map.put("examStatus", examRecord.getStatus());
-                    map.put("examSubmittedAt", examRecord.getSubmittedAt());
-                } else {
-                    map.put("examRecordId", null);
-                    map.put("examScore", null);
-                    map.put("examStatus", null);
-                    map.put("examSubmittedAt", null);
-                }
-
-                // 查询文档
-                Optional<Document> docOpt = documentRepository.findFirstByActivityIdAndUserId(e.getActivityId(), teacherId);
-                map.put("documentId", docOpt.map(Document::getId).orElse(null));
-
-                // 查询评分（已发布）
-                List<Evaluation> evaluations = evaluationRepository.findByActivityIdAndTeacherId(e.getActivityId(), teacherId);
+                Optional<Document> docOpt = documentService.getLatestDocument(teacherId, e.getActivityId());
+                List<Evaluation> evaluations = evaluationService.getActivityTeacherEvaluations(e.getActivityId(), teacherId);
                 Optional<Evaluation> publishedEval = evaluations.stream()
                     .filter(ev -> Boolean.TRUE.equals(ev.getIsPublished()))
                     .findFirst();
-                if (publishedEval.isPresent()) {
-                    Evaluation eval = publishedEval.get();
-                    map.put("scorePublished", true);
-                    map.put("finalScore", eval.getFinalScore());
-                    map.put("comment", eval.getComment());
-                } else {
-                    map.put("scorePublished", false);
-                    map.put("finalScore", null);
-                    map.put("comment", null);
-                }
 
-                return map;
+                return new MyEnrollmentVO(
+                    e.getId(),
+                    e.getActivityId(),
+                    e.getEnrolledAt(),
+                    activity.getName(),
+                    activity.getLevel() != null ? activity.getLevel().name() : null,
+                    activity.getHasExam(),
+                    activity.getStartDate(),
+                    activity.getEndDate(),
+                    activity.getExamStart(),
+                    activity.getExamEnd(),
+                    activity.getMaterialStart(),
+                    activity.getMaterialEnd(),
+                    examRecord != null ? examRecord.getId() : null,
+                    examRecord != null ? examRecord.getScore() : null,
+                    examRecord != null && examRecord.getStatus() != null ? examRecord.getStatus().name() : null,
+                    examRecord != null ? examRecord.getSubmittedAt() : null,
+                    docOpt.map(Document::getId).orElse(null),
+                    publishedEval.isPresent(),
+                    publishedEval.map(Evaluation::getFinalScore).orElse(null),
+                    publishedEval.map(Evaluation::getComment).orElse(null)
+                );
             })
-            .toList();
+            .collect(java.util.stream.Collectors.toList());
         return ApiResponse.success(result);
     }
     
@@ -169,8 +147,6 @@ public class ActivityController {
     @DeleteMapping(value = "/{id}", produces = "application/json;charset=UTF-8")
     @PreAuthorize("hasRole('admin')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
-        // 先验证删除条件
-        activityService.validateDelete(id);
         activityService.delete(id);
         return ApiResponse.success("删除成功", null);
     }
@@ -186,7 +162,7 @@ public class ActivityController {
 
     @GetMapping(value = "/{id}/review-progress", produces = "application/json;charset=UTF-8")
     @PreAuthorize("hasRole('admin')")
-    public ApiResponse<Map<String, Object>> getReviewProgress(@PathVariable Long id) {
+    public ApiResponse<ReviewProgressVO> getReviewProgress(@PathVariable Long id) {
         Activity activity = activityService.getById(id);
         List<User> enrolledTeachers = enrollmentService.getEnrolledTeachersByActivity(id);
         int totalTeachers = enrolledTeachers.size();
@@ -204,23 +180,23 @@ public class ActivityController {
         }
 
         // 获取每个评分人的批阅数量
-        List<Map<String, Object>> reviewerStats = new ArrayList<>();
+        List<ReviewerStatVO> reviewerStats = new ArrayList<>();
         for (Long reviewerId : reviewerIdList) {
             User evaluator = userService.getUserById(reviewerId);
             if (evaluator != null) {
-                long completedCount = evaluationRepository.countByActivityIdAndEvaluatorId(id, reviewerId);
-                Map<String, Object> stat = new HashMap<>();
-                stat.put("id", reviewerId);
-                stat.put("realName", evaluator.getRealName());
-                stat.put("completedCount", completedCount);
-                stat.put("totalRequired", totalTeachers);
-                reviewerStats.add(stat);
+                long completedCount = evaluationService.countByActivityIdAndEvaluatorId(id, reviewerId);
+                reviewerStats.add(new ReviewerStatVO(
+                    reviewerId,
+                    evaluator.getRealName(),
+                    completedCount,
+                    totalTeachers
+                ));
             }
         }
 
         // 计算总完成数
         long totalCompleted = reviewerStats.stream()
-            .mapToLong(s -> (Long) s.get("completedCount"))
+            .mapToLong(ReviewerStatVO::getCompletedCount)
             .sum();
 
         // 判断评分状态
@@ -237,14 +213,15 @@ public class ActivityController {
             reviewStatus = "未配置";
         }
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("enrolledCount", totalTeachers);
-        result.put("reviewerCount", activity.getReviewerCount());
-        result.put("reviewerStats", reviewerStats);
-        result.put("totalCompleted", totalCompleted);
-        result.put("totalRequired", totalRequired);
-        result.put("reviewStatus", reviewStatus);
-        result.put("scoresPublished", activity.getScoresPublished());
+        ReviewProgressVO result = new ReviewProgressVO(
+            totalTeachers,
+            activity.getReviewerCount(),
+            reviewerStats,
+            totalCompleted,
+            totalRequired,
+            reviewStatus,
+            activity.getScoresPublished()
+        );
 
         return ApiResponse.success(result);
     }
@@ -256,7 +233,7 @@ public class ActivityController {
     }
     
     @GetMapping(value = "/{id}/enrollment-info", produces = "application/json;charset=UTF-8")
-    public ApiResponse<Map<String, Object>> getEnrollmentInfo(@PathVariable Long id) {
+    public ApiResponse<EnrollmentInfoVO> getEnrollmentInfo(@PathVariable Long id) {
         User user = getCurrentUser();
         Long teacherId = user.getId();
         Activity activity = activityService.getById(id);
@@ -266,19 +243,19 @@ public class ActivityController {
             ? (int)(maxParticipants - enrolledCount)
             : -1;
 
-        Map<String, Object> info = new HashMap<>();
-        info.put("activityId", id);
-        info.put("activityName", activity.getName());
-        info.put("level", activity.getLevel());
-        info.put("hasExam", activity.getHasExam());
-        info.put("maxParticipants", maxParticipants);
-        info.put("enrolledCount", enrolledCount);
-        info.put("remaining", remaining);
-        info.put("enrollmentStart", activity.getEnrollmentStart());
-        info.put("enrollmentEnd", activity.getEnrollmentEnd());
-        info.put("startDate", activity.getStartDate());
-        info.put("endDate", activity.getEndDate());
-        info.put("reviewerCount", activity.getReviewerCount());
+        EnrollmentInfoVO vo = new EnrollmentInfoVO();
+        vo.setActivityId(id);
+        vo.setActivityName(activity.getName());
+        vo.setLevel(activity.getLevel() != null ? activity.getLevel().name() : null);
+        vo.setHasExam(activity.getHasExam());
+        vo.setMaxParticipants(maxParticipants);
+        vo.setEnrolledCount(enrolledCount);
+        vo.setRemaining(remaining);
+        vo.setEnrollmentStart(activity.getEnrollmentStart());
+        vo.setEnrollmentEnd(activity.getEnrollmentEnd());
+        vo.setStartDate(activity.getStartDate());
+        vo.setEndDate(activity.getEndDate());
+        vo.setReviewerCount(activity.getReviewerCount());
 
         // 查询当前用户的报名详情
         List<PeriodEnrollment> enrollments = enrollmentService.getTeacherEnrollments(teacherId);
@@ -288,56 +265,45 @@ public class ActivityController {
 
         if (myEnrollment.isPresent()) {
             PeriodEnrollment enrollment = myEnrollment.get();
-            info.put("enrolledAt", enrollment.getEnrolledAt());
-            info.put("status", enrollment.getStatus());
+            vo.setEnrolledAt(enrollment.getEnrolledAt());
+            vo.setEnrollmentStatus(enrollment.getStatus() != null ? enrollment.getStatus().name() : null);
 
             // 查询考试记录
             ExamRecord examRecord = examRecordService.getRecordByTeacherAndActivity(teacherId, id);
             if (examRecord != null) {
-                info.put("examRecordId", examRecord.getId());
-                info.put("examScore", examRecord.getScore());
-                info.put("examStatus", examRecord.getStatus());
-                info.put("examSubmittedAt", examRecord.getSubmittedAt());
+                vo.setExamRecordId(examRecord.getId());
+                vo.setExamScore(examRecord.getScore());
+                vo.setExamStatus(examRecord.getStatus() != null ? examRecord.getStatus().name() : null);
+                vo.setExamSubmittedAt(examRecord.getSubmittedAt());
             }
 
             // 查询文档
-            Optional<Document> docOpt = documentRepository.findFirstByActivityIdAndUserId(id, teacherId);
+            Optional<Document> docOpt = documentService.getLatestDocument(teacherId, id);
             if (docOpt.isPresent()) {
                 Document doc = docOpt.get();
-                info.put("documentId", doc.getId());
-                info.put("documentTitle", doc.getTitle());
-                info.put("documentFileName", doc.getFileName());
-                info.put("documentFileSize", doc.getFileSize());
-                info.put("documentCreatedAt", doc.getCreatedAt());
+                vo.setDocumentId(doc.getId());
+                vo.setDocumentTitle(doc.getTitle());
+                vo.setDocumentFileName(doc.getFileName());
+                vo.setDocumentFileSize(doc.getFileSize());
+                vo.setDocumentCreatedAt(doc.getCreatedAt());
             }
 
             // 查询评分（已发布）
-            List<Evaluation> evaluations = evaluationRepository.findByActivityIdAndTeacherId(id, teacherId);
+            List<Evaluation> evaluations = evaluationService.getActivityTeacherEvaluations(id, teacherId);
             Optional<Evaluation> publishedEval = evaluations.stream()
                 .filter(ev -> Boolean.TRUE.equals(ev.getIsPublished()))
                 .findFirst();
             if (publishedEval.isPresent()) {
                 Evaluation eval = publishedEval.get();
-                info.put("scorePublished", true);
-                info.put("finalScore", eval.getScore());
-                info.put("comment", eval.getComment());
+                vo.setScorePublished(true);
+                vo.setFinalScore(eval.getFinalScore());
+                vo.setComment(eval.getComment());
             } else {
-                info.put("scorePublished", false);
-                info.put("finalScore", null);
-                info.put("comment", null);
+                vo.setScorePublished(false);
             }
-        } else {
-            info.put("enrolledAt", null);
-            info.put("status", null);
-            info.put("examRecordId", null);
-            info.put("examScore", null);
-            info.put("documentId", null);
-            info.put("scorePublished", false);
-            info.put("finalScore", null);
-            info.put("comment", null);
         }
 
-        return ApiResponse.success(info);
+        return ApiResponse.success(vo);
     }
     
     @PostMapping(value = "/{id}/enroll", produces = "application/json;charset=UTF-8")
@@ -352,64 +318,52 @@ public class ActivityController {
     }
 
     @GetMapping(value = "/{id}/enrollments", produces = "application/json;charset=UTF-8")
-    public ApiResponse<List<Map<String, Object>>> getEnrollments(@PathVariable Long id) {
+    public ApiResponse<List<EnrollmentTeacherVO>> getEnrollments(@PathVariable Long id) {
         List<User> teachers = enrollmentService.getEnrolledTeachersByActivity(id);
         Activity activity = activityService.getById(id);
-        List<Map<String, Object>> result = teachers.stream()
+        List<EnrollmentTeacherVO> result = teachers.stream()
             .map(teacher -> {
-                Map<String, Object> map = new HashMap<>();
-                map.put("id", teacher.getId());
-                map.put("username", teacher.getUsername());
-                map.put("realName", teacher.getRealName());
-                map.put("department", teacher.getDepartment());
-                // 获取报名时间
                 PeriodEnrollment enrollment = enrollmentService.getEnrollment(id, teacher.getId());
-                if (enrollment != null) {
-                    map.put("enrolledAt", enrollment.getEnrolledAt());
-                }
-                // 根据活动级别获取提交时间
+                Long examRecordId = null;
+                LocalDateTime submittedAt = null;
+                String submissionStatus = "not_started";
+
                 if ("C".equals(activity.getLevel())) {
-                    // C级：获取考试提交时间
                     ExamRecord examRecord = examRecordService.getRecordByTeacherAndActivity(teacher.getId(), id);
                     if (examRecord != null) {
-                        map.put("examRecordId", examRecord.getId());
+                        examRecordId = examRecord.getId();
                         if (examRecord.getSubmittedAt() != null) {
-                            // 已提交：显示提交时间
-                            map.put("submittedAt", examRecord.getSubmittedAt());
-                            map.put("submissionStatus", "submitted");
+                            submittedAt = examRecord.getSubmittedAt();
+                            submissionStatus = "submitted";
                         } else {
-                            // 已开始答题但未提交：判断考试是否已结束
                             LocalDateTime now = LocalDateTime.now();
                             if (activity.getExamEnd() != null && now.isAfter(activity.getExamEnd())) {
-                                // 考试已结束，未提交
-                                map.put("submittedAt", null);
-                                map.put("submissionStatus", "not_submitted");
+                                submissionStatus = "not_submitted";
                             } else {
-                                // 考试进行中
-                                map.put("submittedAt", null);
-                                map.put("submissionStatus", examRecord.getStatus().name());
+                                submissionStatus = examRecord.getStatus() != null ? examRecord.getStatus().name() : "not_started";
                             }
                         }
-                    } else {
-                        map.put("examRecordId", null);
-                        map.put("submittedAt", null);
-                        map.put("submissionStatus", "not_started");
                     }
                 } else {
-                    // 其他级别：获取文档上传时间
                     var docOpt = documentService.getLatestDocument(teacher.getId(), id);
                     if (docOpt.isPresent()) {
-                        Document doc = docOpt.get();
-                        map.put("submittedAt", doc.getCreatedAt());
-                        map.put("submissionStatus", "submitted");
-                    } else {
-                        map.put("submittedAt", null);
-                        map.put("submissionStatus", "not_started");
+                        submittedAt = docOpt.get().getCreatedAt();
+                        submissionStatus = "submitted";
                     }
                 }
-                return map;
+
+                return new EnrollmentTeacherVO(
+                    teacher.getId(),
+                    teacher.getUsername(),
+                    teacher.getRealName(),
+                    teacher.getDepartment(),
+                    enrollment != null ? enrollment.getEnrolledAt() : null,
+                    examRecordId,
+                    submittedAt,
+                    submissionStatus
+                );
             })
-            .toList();
+            .collect(java.util.stream.Collectors.toList());
         return ApiResponse.success(result);
     }
 }

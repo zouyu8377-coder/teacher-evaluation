@@ -170,11 +170,11 @@ const loadData = async () => {
     }
     
     const [userRes, evalRes, docRes, levelRes, activitiesRes] = await Promise.all([
-      getUserList({ role: 'teacher', size: 1 }).catch(err => ({ code: 500 })),
-      getEvaluationList({ size: 1 }).catch(err => ({ code: 500 })),
-      getDocumentList({ size: 1 }).catch(err => ({ code: 500 })),
-      getLevelPassedCount().catch(err => ({ code: 500 })),
-      getActiveActivities().catch(err => ({ code: 500 }))
+      getUserList({ role: 'teacher', size: 1 }).catch(() => ({ code: 500, message: '', data: null } as any)),
+      getEvaluationList({ size: 1 }).catch(() => ({ code: 500, message: '', data: null } as any)),
+      getDocumentList({ size: 1 }).catch(() => ({ code: 500, message: '', data: null } as any)),
+      getLevelPassedCount().catch(() => ({ code: 500, data: null } as any)),
+      getActiveActivities().catch(() => ({ code: 500, data: null } as any))
     ])
     
     if (userRes.code === 200) {
@@ -193,7 +193,7 @@ const loadData = async () => {
       activities.value = activitiesRes.data || []
     }
     
-    const evalRes2 = await getUserList({ role: 'evaluator', size: 1 }).catch(err => ({ code: 500 }))
+    const evalRes2 = await getUserList({ role: 'evaluator', size: 1 }).catch(() => ({ code: 500, message: '', data: null } as any))
     if (evalRes2.code === 200) {
       stats.value.evaluatorCount = evalRes2.data?.total || 0
     }

@@ -2,6 +2,8 @@ package com.school.teacherEval.service;
 
 import com.school.teacherEval.dto.LoginRequest;
 import com.school.teacherEval.dto.LoginResponse;
+import com.school.teacherEval.dto.UserCreateDTO;
+import com.school.teacherEval.dto.UserUpdateDTO;
 import com.school.teacherEval.entity.User;
 import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.UserRepository;
@@ -37,7 +39,7 @@ public class UserService {
             throw new BusinessException("用户名或密码错误");
         }
 
-        if (user.getStatus() == 0) {
+        if (user.getStatus() != null && user.getStatus() == 0) {
             log.warn("用户登录失败 - 账号已被禁用: {}", request.getUsername());
             throw new BusinessException("账号已被禁用");
         }
@@ -74,36 +76,42 @@ public class UserService {
     }
     
     @Transactional
-    public User createUser(User user) {
-        if (userRepository.existsByUsername(user.getUsername())) {
+    public User createUser(UserCreateDTO dto) {
+        if (userRepository.existsByUsername(dto.getUsername())) {
             throw new BusinessException("用户名已存在");
         }
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        User user = new User();
+        user.setUsername(dto.getUsername());
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        user.setRealName(dto.getRealName());
+        user.setRole(dto.getRole());
+        user.setDepartment(dto.getDepartment());
+        user.setStatus(dto.getStatus() != null ? dto.getStatus() : 1);
         log.info("创建用户: {}, 角色: {}", user.getUsername(), user.getRole());
         return userRepository.save(user);
     }
 
     @Transactional
-    public User updateUser(Long id, User user) {
+    public User updateUser(Long id, UserUpdateDTO dto) {
         User existingUser = userRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("用户不存在"));
-        
-        if (user.getRealName() != null) {
-            existingUser.setRealName(user.getRealName());
+
+        if (dto.getRealName() != null) {
+            existingUser.setRealName(dto.getRealName());
         }
-        if (user.getDepartment() != null) {
-            existingUser.setDepartment(user.getDepartment());
+        if (dto.getDepartment() != null) {
+            existingUser.setDepartment(dto.getDepartment());
         }
-        if (user.getRole() != null) {
-            existingUser.setRole(user.getRole());
+        if (dto.getRole() != null) {
+            existingUser.setRole(dto.getRole());
         }
-        if (user.getStatus() != null) {
-            existingUser.setStatus(user.getStatus());
+        if (dto.getStatus() != null) {
+            existingUser.setStatus(dto.getStatus());
         }
-        if (user.getPassword() != null && !user.getPassword().isEmpty()) {
-            existingUser.setPassword(passwordEncoder.encode(user.getPassword()));
+        if (dto.getPassword() != null && !dto.getPassword().isEmpty()) {
+            existingUser.setPassword(passwordEncoder.encode(dto.getPassword()));
         }
-        
+
         return userRepository.save(existingUser);
     }
     

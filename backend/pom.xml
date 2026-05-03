@@ -4,7 +4,7 @@
     
     <groupId>com.school</groupId>
     <artifactId>teacher-evaluation</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.7</version>
     <packaging>jar</packaging>
     
     <name>teacher-evaluation</name>
@@ -41,6 +41,10 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
         
         <!-- Database -->

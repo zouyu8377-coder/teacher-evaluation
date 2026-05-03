@@ -28,3 +28,16 @@ node_modules/
 
 # Maven
 .mvn/wrapper/maven-wrapper.jar
+
+# Deploy data (database, minio, etc.)
+deploy/data/
+deploy/frontend/
+deploy/*.jar
+*.sock
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws

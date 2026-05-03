@@ -66,6 +66,8 @@ public class TeacherDashboardDTO {
         private Boolean scorePublished;
         private BigDecimal finalScore;
         private Boolean isPassed;
+        private Integer correctCount;
+        private Integer wrongCount;
     }
 
     @Data

@@ -28,7 +28,8 @@ public class ActivityService {
     private final ActivityRepository activityRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final EvaluationRepository evaluationRepository;
-    
+    private final ActivityValidator activityValidator;
+
     public List<Activity> getAll() {
         return activityRepository.findAll();
     }
@@ -47,47 +48,7 @@ public class ActivityService {
     
     @Transactional
     public Activity create(Activity activity) {
-        // 校验报名时间必填
-        if (activity.getEnrollmentStart() == null) {
-            throw new BusinessException("报名开始时间不能为空");
-        }
-        if (activity.getEnrollmentEnd() == null) {
-            throw new BusinessException("报名结束时间不能为空");
-        }
-        if (activity.getEnrollmentStart().isAfter(activity.getEnrollmentEnd())) {
-            throw new BusinessException("报名开始时间必须早于报名结束时间");
-        }
-
-        // C级活动校验考试时间
-        if (activity.getLevel() == Activity.Level.C) {
-            if (activity.getExamStart() == null) {
-                throw new BusinessException("C级活动考试开始时间不能为空");
-            }
-            // 如果没有传入 examEnd，但有 examDurationMinutes，则自动计算
-            if (activity.getExamEnd() == null && activity.getExamDurationMinutes() != null) {
-                activity.setExamEnd(activity.getExamStart().plusMinutes(activity.getExamDurationMinutes()));
-            }
-            if (activity.getExamEnd() == null) {
-                throw new BusinessException("C级活动考试结束时间不能为空");
-            }
-            if (activity.getExamStart().isBefore(activity.getEnrollmentEnd())) {
-                throw new BusinessException("C级活动考试开始时间必须位于报名时间结束之后");
-            }
-            if (activity.getExamStart().isAfter(activity.getExamEnd())) {
-                throw new BusinessException("考试开始时间必须早于考试结束时间");
-            }
-        } else {
-            // 非C级活动校验材料上传时间
-            if (activity.getMaterialStart() == null) {
-                throw new BusinessException("材料上传开始时间不能为空");
-            }
-            if (activity.getMaterialEnd() == null) {
-                throw new BusinessException("材料上传结束时间不能为空");
-            }
-            if (activity.getMaterialStart().isAfter(activity.getMaterialEnd())) {
-                throw new BusinessException("材料上传开始时间必须早于材料上传结束时间");
-            }
-        }
+        activityValidator.validateForSave(activity);
 
         // 默认评分人为0人
         if (activity.getReviewerCount() == null) {
@@ -115,33 +76,12 @@ public class ActivityService {
         if (updated.getDescription() != null) activity.setDescription(updated.getDescription());
         if (updated.getMaxParticipants() != null) activity.setMaxParticipants(updated.getMaxParticipants());
         if (updated.getStatus() != null) {
-            // 检查切换到"进行中"状态时的校验
-            if (updated.getStatus() == Activity.Status.active && activity.getStatus() != Activity.Status.active) {
-                // 校验评分人数量
-                Integer reviewerCount = activity.getReviewerCount();
-                if (reviewerCount == null || reviewerCount == 0) {
-                    throw new BusinessException("评分人数量不能为0，请先添加评分人");
-                }
-                // 校验评分人ID列表是否为空
-                String reviewerIds = activity.getReviewerIds();
-                if (reviewerIds == null || reviewerIds.isEmpty() || "[]".equals(reviewerIds)) {
-                    throw new BusinessException("评分人ID列表为空，请先添加评分人");
-                }
-                // 解析并校验实际评分人数量
-                try {
-                    List<Long> reviewerIdList = objectMapper.readValue(reviewerIds, new TypeReference<List<Long>>() {});
-                    if (reviewerIdList == null || reviewerIdList.isEmpty()) {
-                        throw new BusinessException("评分人ID列表为空，请先添加评分人");
-                    }
-                } catch (Exception e) {
-                    throw new BusinessException("评分人ID列表解析失败，请检查数据");
-                }
-                // C级活动校验试卷挂载
-                if (activity.getLevel() == Activity.Level.C && (activity.getExamPaperId() == null || activity.getExamPaperId() == 0L)) {
-                    throw new BusinessException("C级活动必须先挂载试卷才能启用");
-                }
-            }
+            Activity.Status oldStatus = activity.getStatus();
             activity.setStatus(updated.getStatus());
+            // 只有在状态切换为 active 时才执行启用校验
+            if (updated.getStatus() == Activity.Status.active && oldStatus != Activity.Status.active) {
+                activityValidator.validateActivation(activity);
+            }
         }
         if (updated.getEnrollmentStart() != null) activity.setEnrollmentStart(updated.getEnrollmentStart());
         if (updated.getEnrollmentEnd() != null) activity.setEnrollmentEnd(updated.getEnrollmentEnd());
@@ -159,42 +99,11 @@ public class ActivityService {
         if (updated.getStartDate() != null) activity.setStartDate(updated.getStartDate());
         if (updated.getEndDate() != null) activity.setEndDate(updated.getEndDate());
 
-        // C级活动校验考试时间
-        if (activity.getLevel() == Activity.Level.C) {
-            if (activity.getExamStart() == null) {
-                throw new BusinessException("C级活动考试开始时间不能为空");
-            }
-            // 如果没有传入 examEnd，但有 examDurationMinutes，则自动计算
-            if (activity.getExamEnd() == null && activity.getExamDurationMinutes() != null) {
-                activity.setExamEnd(activity.getExamStart().plusMinutes(activity.getExamDurationMinutes()));
-            }
-            if (activity.getExamEnd() == null) {
-                throw new BusinessException("C级活动考试结束时间不能为空");
-            }
-            if (activity.getExamStart().isBefore(activity.getEnrollmentEnd())) {
-                throw new BusinessException("C级活动考试开始时间必须位于报名时间结束之后");
-            }
-            if (activity.getExamStart().isAfter(activity.getExamEnd())) {
-                throw new BusinessException("考试开始时间必须早于考试结束时间");
-            }
-        } else {
-            // 非C级活动校验材料上传时间
-            if (activity.getMaterialStart() == null) {
-                throw new BusinessException("材料上传开始时间不能为空");
-            }
-            if (activity.getMaterialEnd() == null) {
-                throw new BusinessException("材料上传结束时间不能为空");
-            }
-            if (activity.getMaterialStart().isAfter(activity.getMaterialEnd())) {
-                throw new BusinessException("材料上传开始时间必须早于材料上传结束时间");
-            }
-        }
+        // 统一业务规则校验
+        activityValidator.validateForSave(activity);
+
         if (updated.getReviewerCount() != null) {
-            Integer currentVal = activity.getReviewerCount();
-            Integer newVal = updated.getReviewerCount();
-            if (newVal != 2 || currentVal == null) {
-                activity.setReviewerCount(newVal);
-            }
+            activity.setReviewerCount(updated.getReviewerCount());
         } else if (activity.getReviewerCount() == null) {
             activity.setReviewerCount(0);
         }
@@ -208,6 +117,7 @@ public class ActivityService {
     
     @Transactional
     public void delete(Long id) {
+        validateDelete(id);
         activityRepository.deleteById(id);
     }
     

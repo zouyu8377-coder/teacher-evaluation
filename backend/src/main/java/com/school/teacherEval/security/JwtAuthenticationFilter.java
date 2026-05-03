@@ -22,6 +22,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
+    private final TokenBlacklistService tokenBlacklistService;
     
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
@@ -32,21 +33,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
             
-            if (jwtUtil.validateToken(token)) {
+            if (jwtUtil.validateToken(token) && !tokenBlacklistService.isBlacklisted(token)) {
                 String username = jwtUtil.getUsernameFromToken(token);
                 String role = jwtUtil.getRoleFromToken(token);
-                
+
                 User user = userRepository.findByUsername(username).orElse(null);
 
-                if (user != null) {
+                if (user != null && user.getStatus() != null && user.getStatus() == 1) {
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
-                                    username,  // 使用username作为principal，而不是User对象
+                                    username,
                                     null,
                                     Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
                             );
+                    // 将 User 对象放入 details，便于后续通过 details 获取完整用户信息
+                    authentication.setDetails(user);
 
                     SecurityContextHolder.getContext().setAuthentication(authentication);
+                } else {
+                    // 用户不存在或已被禁用，清除认证上下文
+                    SecurityContextHolder.clearContext();
                 }
             }
         }

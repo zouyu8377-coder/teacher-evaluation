@@ -1,21 +1,6 @@
 # =====================================================
-# 构建阶段：使用Maven构建fat jar
-# =====================================================
-FROM maven:3.9-eclipse-temurin-17-alpine AS builder
-
-WORKDIR /app
-
-# 先复制pom.xml和源码，利用Maven层缓存
-COPY pom.xml .
-# 下载依赖（如果pom.xml没变，会复用缓存）
-RUN mvn dependency:go-offline -B
-
-# 复制源码并构建
-COPY src ./src
-RUN mvn clean package -DskipTests -B
-
-# =====================================================
-# 运行阶段：精简JRE镜像
+# 运行阶段：精简JRE镜像（宿主机预编译jar直接打包）
+# 前置要求：先在宿主机执行 mvn clean package -DskipTests
 # =====================================================
 FROM eclipse-temurin:17-jre-alpine
 
@@ -26,8 +11,8 @@ RUN apk add --no-cache tzdata && \
 
 WORKDIR /app
 
-# 只复制jar文件
-COPY --from=builder /app/target/teacher-evaluation-1.0.0.jar app.jar
+# 直接复制宿主机已编译的jar
+COPY target/teacher-evaluation-*.jar app.jar
 
 EXPOSE 8080
 

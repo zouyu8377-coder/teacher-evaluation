@@ -192,14 +192,14 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getQuestions({
-      activityId: query.activityId,
+      periodId: query.activityId!,
       type: query.type || undefined,
       page: query.page,
       size: query.size
     })
     if (res.code === 200) {
-      tableData.value = res.data.content
-      total.value = res.data.totalElements
+      tableData.value = res.data.records
+      total.value = res.data.total
     }
   } finally {
     loading.value = false
@@ -286,9 +286,9 @@ const handleSubmit = async () => {
   try {
     let res
     if (editId.value) {
-      res = await updateQuestion(editId.value, data)
+      res = await updateQuestion(editId.value, data as any)
     } else {
-      res = await createQuestion(data)
+      res = await createQuestion(data as any)
     }
     if (res.code === 200) {
       ElMessage.success('操作成功')
