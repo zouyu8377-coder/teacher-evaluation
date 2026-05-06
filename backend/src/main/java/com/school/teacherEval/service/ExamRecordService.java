@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.teacherEval.entity.*;
 import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.*;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.NoResultException;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -23,6 +26,9 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class ExamRecordService {
     
+    @PersistenceContext
+    private EntityManager entityManager;
+
     private final ExamRecordRepository recordRepository;
     private final ExamPaperRepository paperRepository;
     private final ExamQuestionRepository questionRepository;
@@ -37,12 +43,7 @@ public class ExamRecordService {
         // 获取活动信息
         Activity activity = activityService.getById(activityId);
         if (!Boolean.TRUE.equals(activity.getHasExam()) || activity.getExamPaperId() == null) {
-            throw new RuntimeException("该活动没有关联试卷");
-        }
-
-        // 校验活动状态
-        if (activity.getStatus() != Activity.Status.active) {
-            throw new BusinessException("该活动未开启或已结束，无法参加考试");
+            throw new BusinessException("该活动没有关联试卷");
         }
 
         // 校验教师是否已报名
@@ -53,7 +54,7 @@ public class ExamRecordService {
         // 检查当前时间是否在考试时间段内
         LocalDateTime now = LocalDateTime.now();
         if (activity.getExamStart() == null || activity.getExamEnd() == null) {
-            throw new RuntimeException("该活动考试时间未设置");
+            throw new BusinessException("该活动考试时间未设置");
         }
         if (now.isBefore(activity.getExamStart())) {
             throw new BusinessException("考试尚未开始，开始时间：" + activity.getExamStart().toString().replace("T", " "));
@@ -76,7 +77,7 @@ public class ExamRecordService {
 
         if (!existingRecords.isEmpty()) {
             // 已参加过该考试（不论是否通过），不允许再次参加
-            throw new RuntimeException("您已参加过该考试，不可重复考试");
+            throw new BusinessException("您已参加过该考试，不可重复考试");
         }
 
         // 创建考试记录
@@ -96,8 +97,17 @@ public class ExamRecordService {
     }
     
     public ExamRecord getRecordByTeacherAndActivity(Long teacherId, Long activityId) {
-        List<ExamRecord> records = recordRepository.findByTeacherIdAndActivityId(teacherId, activityId);
-        return records.isEmpty() ? null : records.get(0);
+        try {
+            return entityManager.createQuery(
+                    "SELECT r FROM ExamRecord r WHERE r.teacherId = :teacherId AND r.activityId = :activityId ORDER BY r.id DESC",
+                    ExamRecord.class)
+                .setParameter("teacherId", teacherId)
+                .setParameter("activityId", activityId)
+                .setMaxResults(1)
+                .getSingleResult();
+        } catch (NoResultException e) {
+            return null;
+        }
     }
     
     public List<ExamRecord> getMyRecords(Long teacherId) {
@@ -114,13 +124,15 @@ public class ExamRecordService {
 
         // 校验权限
         if (!record.getTeacherId().equals(currentUserId)) {
-            throw new RuntimeException("无权限查看");
+            throw new BusinessException("无权限查看");
         }
 
-        // 校验当前时间是否在考试窗口内（防止考试时间结束后仍加载题目）
+        // 校验当前时间是否在考试窗口内（防止考试时间结束后仍继续作答）
+        // 已提交的考试记录允许查看，不受考试结束时间限制
         Activity activity = activityService.getById(record.getActivityId());
         LocalDateTime now = LocalDateTime.now();
-        if (activity.getExamEnd() != null && now.isAfter(activity.getExamEnd())) {
+        if (record.getStatus() != ExamRecord.Status.submitted
+                && activity.getExamEnd() != null && now.isAfter(activity.getExamEnd())) {
             throw new BusinessException("考试时间已结束，无法查看题目");
         }
 
@@ -208,11 +220,11 @@ public class ExamRecordService {
         ExamRecord record = getRecordById(recordId);
 
         if (!record.getTeacherId().equals(currentUserId)) {
-            throw new RuntimeException("无权限操作");
+            throw new BusinessException("无权限操作");
         }
 
         if (record.getStatus() != ExamRecord.Status.in_progress) {
-            throw new RuntimeException("考试已结束，无法作答");
+            throw new BusinessException("考试已结束，无法作答");
         }
 
         // 校验教师是否仍具有报名资格（防止被踢出后仍继续考试）
@@ -244,7 +256,7 @@ public class ExamRecordService {
         try {
             record.setAnswers(objectMapper.writeValueAsString(existingAnswers));
         } catch (Exception e) {
-            throw new RuntimeException("保存答案失败");
+            throw new BusinessException("保存答案失败");
         }
         
         return recordRepository.save(record);
@@ -255,11 +267,11 @@ public class ExamRecordService {
         ExamRecord record = getRecordById(recordId);
 
         if (!record.getTeacherId().equals(currentUserId)) {
-            throw new RuntimeException("无权限操作");
+            throw new BusinessException("无权限操作");
         }
 
         if (record.getStatus() != ExamRecord.Status.in_progress) {
-            throw new RuntimeException("考试已提交");
+            throw new BusinessException("考试已提交");
         }
 
         // 校验教师是否仍具有报名资格（防止被踢出后仍提交）
@@ -374,6 +386,7 @@ public class ExamRecordService {
         evaluation.setAutoScore(record.getAutoScore());
         evaluation.setManualAdjust(record.getManualAdjust());
         evaluation.setScore(record.getScore());
+        evaluation.setStatus(Evaluation.Status.submitted);
 
         evaluationRepository.save(evaluation);
     }

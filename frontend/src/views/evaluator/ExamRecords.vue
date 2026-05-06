@@ -62,7 +62,8 @@
             <el-button type="primary" link @click="viewDetail(row)" v-if="row.status === 'submitted'">
               查看详情
             </el-button>
-            <el-button type="warning" link @click="openAdjust(row)" v-if="isAdmin && row.status === 'submitted'">
+            <!-- C级客观题不允许调整分数 -->
+            <el-button type="warning" link @click="openAdjust(row)" v-if="false">
               调整分数
             </el-button>
             <el-button type="success" link @click="publishScore(row)" v-if="isAdmin && row.status === 'submitted' && !row.isPublished">
@@ -148,7 +149,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { getExamRecordsByActivity, getExamRecordDetail, adjustScore } from '@/api/exam'
 import { getActivityList, getActivitiesByPeriod } from '@/api/activity'
@@ -179,7 +180,7 @@ const query = reactive({
 const loadActivities = async () => {
   const res = await getActivityList()
   if (res.code === 200) {
-    activities.value = res.data.filter((p: any) => p.status === 'active' && p.level === 'C')
+    activities.value = res.data.filter((p: any) => p.level === 'C')
   }
 }
 
@@ -270,13 +271,27 @@ const confirmAdjust = async () => {
 
 const publishScore = async (row: any) => {
   try {
-    const res = await publishEvaluationScores(query.activityId!, row.teacherId)
+    const { value } = await ElMessageBox.prompt('请设置通过分数线', '公布成绩', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputPattern: /^\d+(\.\d{1,2})?$/,
+      inputErrorMessage: '请输入有效的分数',
+      inputValue: '60'
+    })
+    const passingScore = parseFloat(value)
+    if (isNaN(passingScore) || passingScore < 0 || passingScore > 100) {
+      ElMessage.error('分数线必须在 0-100 之间')
+      return
+    }
+    const res = await publishEvaluationScores(query.activityId!, passingScore, row.teacherId)
     if (res.code === 200) {
       ElMessage.success('成绩公布成功')
       loadData()
     }
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '公布失败')
+    if (e !== 'cancel') {
+      ElMessage.error(e.response?.data?.message || '公布失败')
+    }
   }
 }
 

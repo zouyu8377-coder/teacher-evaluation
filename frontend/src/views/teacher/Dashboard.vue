@@ -63,10 +63,6 @@
                   </span>
                 </div>
               </div>
-              <div v-if="dashboard?.currentLevel?.hasPassed && dashboard?.currentLevel?.bestScore" class="best-score">
-                <span>最高成绩</span>
-                <strong>{{ dashboard.currentLevel.bestScore }}分</strong>
-              </div>
               <div v-if="dashboard?.currentLevel?.passedAt" class="pass-date">
                 <span>通过时间</span>
                 <strong>{{ formatDate(dashboard.currentLevel.passedAt) }}</strong>
@@ -214,7 +210,7 @@
                     <!-- 考试已完成（未评分或已评分） -->
                     <template v-else-if="enrollment.examStatus === 'completed'">
                       <template v-if="!enrollment.scorePublished">
-                        <el-tag type="info" size="small">考试完成，等待评分</el-tag>
+                        <el-tag type="info" size="small">考试完成，等待成绩发布</el-tag>
                       </template>
                       <template v-else-if="enrollment.isPassed">
                         <el-tag type="success" size="small">已通过</el-tag>
@@ -227,7 +223,7 @@
                       <span v-if="enrollment.correctCount !== undefined && enrollment.wrongCount !== undefined" class="exam-stats">
                         对{{ enrollment.correctCount }}题 / 错{{ enrollment.wrongCount }}题
                       </span>
-                      <el-button type="primary" size="small" @click="viewExamDetail(enrollment)" style="margin-left: 8px;">
+                      <el-button v-if="isExamEnded(enrollment)" type="primary" size="small" @click="viewExamDetail(enrollment)" style="margin-left: 8px;">
                         查看答题详情
                       </el-button>
                     </template>
@@ -340,6 +336,14 @@ const isInWindow = (enrollment: EnrollmentInfo) => {
   }
 }
 
+// 检查考试是否已结束
+const isExamEnded = (enrollment: EnrollmentInfo) => {
+  if (enrollment.level !== 'C') return true
+  const now = new Date()
+  const end = enrollment.examEndTime ? new Date(enrollment.examEndTime) : null
+  return !end || now > end
+}
+
 // 获取时间窗口描述
 const getWindowText = (enrollment: EnrollmentInfo) => {
   if (enrollment.level === 'C') {
@@ -350,10 +354,10 @@ const getWindowText = (enrollment: EnrollmentInfo) => {
 }
 
 const getLevelClass = (level: string | undefined) => {
-  if (!level) return 'level-c'
-  const levelOrder: Record<string, number> = { C: 0, B2: 1, B1: 2, A2: 3, A1: 4 }
+  if (!level) return 'level-none'
+  const levelOrder: Record<string, number> = { C: 0, B: 1, B2: 1, B1: 2, A: 3, A2: 3, A1: 4 }
   const order = levelOrder[level] ?? 0
-  return `level-${['c', 'b2', 'b1', 'a2', 'a1'][order]}`
+  return `level-${['c', 'b', 'b1', 'a', 'a1'][order]}`
 }
 
 const getTodoIcon = (type: string) => {
@@ -367,9 +371,9 @@ const getTodoIcon = (type: string) => {
 
 const handleTodoClick = (todo: TodoItem) => {
   if (todo.type === 'exam') {
-    router.push(`/teacher/exam?activityId=${todo.relatedId}`)
+    router.push({ path: '/teacher/enrollment', query: { tab: 'enrolled' } })
   } else if (todo.type === 'enrollment') {
-    router.push('/teacher/enrollment')
+    router.push({ path: '/teacher/enrollment', query: { tab: 'available' } })
   }
 }
 
@@ -539,9 +543,12 @@ const goToUpload = (enrollment: EnrollmentInfo) => {
   color: white;
 }
 
+.level-badge.level-none { background: linear-gradient(135deg, #94a3b8, #64748b); }
 .level-badge.level-c { background: linear-gradient(135deg, #10b981, #059669); }
+.level-badge.level-b { background: linear-gradient(135deg, #3b82f6, #2563eb); }
 .level-badge.level-b2 { background: linear-gradient(135deg, #3b82f6, #2563eb); }
 .level-badge.level-b1 { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+.level-badge.level-a { background: linear-gradient(135deg, #f59e0b, #d97706); }
 .level-badge.level-a2 { background: linear-gradient(135deg, #f59e0b, #d97706); }
 .level-badge.level-a1 { background: linear-gradient(135deg, #ef4444, #dc2626); }
 

@@ -17,4 +17,6 @@ public class UserVO {
     private String department;
     private Integer status;
     private LocalDateTime createdAt;
+    private String teacherLevel;
+    private LocalDateTime levelChangedAt;
 }

@@ -3,7 +3,6 @@ import type { ApiResponse, PageResponse } from './types'
 
 export interface ExamQuestion {
   id: number
-  periodId: number
   questionText: string
   questionType: 'single' | 'multiple'
   options: { id: string; text: string }[]
@@ -16,7 +15,6 @@ export interface ExamQuestion {
 
 export interface ExamPaper {
   id: number
-  periodId: number
   name: string
   description: string
   totalScore: number
@@ -45,7 +43,6 @@ export interface ExamRecord {
 // ========== 题库相关 ==========
 
 export const getQuestions = (params: {
-  periodId: number
   type?: 'single' | 'multiple'
   difficulty?: number
   page?: number
@@ -70,10 +67,9 @@ export const deleteQuestion = (id: number) => {
   return api.delete(`/exam/questions/${id}`) as Promise<ApiResponse<void>>
 }
 
-export const importQuestions = (file: File, periodId: number) => {
+export const importQuestions = (file: File) => {
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('periodId', String(periodId))
   return api.post('/exam/questions/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }) as Promise<ApiResponse<any>>
@@ -85,7 +81,7 @@ export const downloadQuestionTemplate = () => {
 
 // ========== 试卷相关 ==========
 
-export const getPapers = (params: { periodId: number; page?: number; size?: number }) => {
+export const getPapers = (params: { page?: number; size?: number }) => {
   return api.get('/exam/papers', { params }) as Promise<ApiResponse<PageResponse<ExamPaper>>>
 }
 

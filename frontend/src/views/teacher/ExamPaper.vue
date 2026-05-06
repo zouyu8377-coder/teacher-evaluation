@@ -38,7 +38,7 @@
             </div>
           </template>
           <template #extra>
-            <el-button type="primary" @click="showAnswerDetail = true">查看答题详情</el-button>
+            <el-button v-if="canViewAnswerDetail" type="primary" @click="showAnswerDetail = true">查看答题详情</el-button>
           </template>
         </el-result>
       </div>
@@ -153,6 +153,7 @@ const starting = ref(false)
 const examStarted = ref(false)
 const examSubmitted = ref(false)
 const showAnswerDetail = ref(false)
+const canViewAnswerDetail = ref(false)
 
 const paperInfo = reactive({
   id: 0,
@@ -278,6 +279,15 @@ const loadExamData = async () => {
               answers[q.order] = q.userAnswer
             }
           }
+        }
+
+        // 判断是否可以查看答题详情（活动结束后才开放）
+        const activityRes = await getActivityById(data.record.activityId)
+        if (activityRes.code === 200) {
+          const act = activityRes.data
+          const now = new Date()
+          const examEnd = act.examEnd ? new Date(act.examEnd) : null
+          canViewAnswerDetail.value = !examEnd || now >= examEnd
         }
       }
     }

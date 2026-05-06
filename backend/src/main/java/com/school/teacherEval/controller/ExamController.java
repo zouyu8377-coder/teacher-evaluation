@@ -3,6 +3,7 @@ package com.school.teacherEval.controller;
 import com.school.teacherEval.dto.ApiResponse;
 import com.school.teacherEval.entity.*;
 import com.school.teacherEval.service.*;
+import com.school.teacherEval.vo.PageVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
@@ -35,11 +36,12 @@ public class ExamController {
     
     @GetMapping("/questions")
     @Operation(summary = "获取题库列表")
-    public ApiResponse<Page<ExamQuestion>> getQuestions(
+    public ApiResponse<PageVO<ExamQuestion>> getQuestions(
             @RequestParam(required = false) ExamQuestion.QuestionType type,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ApiResponse.success(questionService.getQuestions(type, page, size));
+        Page<ExamQuestion> p = questionService.getQuestions(type, page, size);
+        return ApiResponse.success(new PageVO<>(p.getContent(), p.getTotalElements(), p.getNumber() + 1, p.getSize()));
     }
     
     @GetMapping("/questions/{id}")
@@ -140,17 +142,11 @@ public class ExamController {
     
     @GetMapping("/papers")
     @Operation(summary = "获取试卷列表")
-    public ApiResponse<Page<ExamPaper>> getPapers(
-            @RequestParam(required = false) Long activityId,
+    public ApiResponse<PageVO<ExamPaper>> getPapers(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ApiResponse.success(paperService.getPapers(activityId, page, size));
-    }
-    
-    @GetMapping("/papers/activity/{activityId}")
-    @Operation(summary = "获取活动的试卷列表")
-    public ApiResponse<List<ExamPaper>> getPapersByActivity(@PathVariable Long activityId) {
-        return ApiResponse.success(paperService.getPapersByActivity(activityId));
+        Page<ExamPaper> p = paperService.getPapers(page, size);
+        return ApiResponse.success(new PageVO<>(p.getContent(), p.getTotalElements(), p.getNumber() + 1, p.getSize()));
     }
     
     @GetMapping("/papers/{id}")
@@ -272,11 +268,12 @@ public class ExamController {
     @GetMapping("/records/activity/{activityId}")
     @Operation(summary = "获取活动的考试记录")
     @PreAuthorize("hasRole('evaluator') or hasRole('admin')")
-    public ApiResponse<Page<ExamRecord>> getRecordsByActivity(
+    public ApiResponse<PageVO<ExamRecord>> getRecordsByActivity(
             @PathVariable Long activityId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(recordService.getRecordsByActivity(activityId, page, size));
+        Page<ExamRecord> p = recordService.getRecordsByActivity(activityId, page, size);
+        return ApiResponse.success(new PageVO<>(p.getContent(), p.getTotalElements(), p.getNumber() + 1, p.getSize()));
     }
     
     @GetMapping("/records/{id}/detail")
@@ -289,7 +286,7 @@ public class ExamController {
         if (user.getRole() == User.Role.teacher) {
             ExamRecord record = recordService.getRecordById(id);
             if (!record.getTeacherId().equals(user.getId())) {
-                return ApiResponse.error(403, "权限不足");
+                throw new org.springframework.security.access.AccessDeniedException("权限不足");
             }
         }
         boolean isEvaluatorOrAdmin = user.getRole() == User.Role.evaluator || user.getRole() == User.Role.admin;

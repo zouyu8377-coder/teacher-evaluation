@@ -96,7 +96,7 @@
               <span class="material-symbols-outlined" :style="{ color: scorePublished ? '#16a34a' : '#d97706' }">
                 {{ scorePublished ? 'check_circle' : 'hourglass_empty' }}
               </span>
-              <span>{{ scorePublished ? '考核已完成' : '考试已完成，等待评分中' }}</span>
+              <span>{{ scorePublished ? '考核已完成' : '考试已完成，等待成绩发布' }}</span>
             </div>
             <div class="exam-info">
               <div class="info-row">
@@ -163,7 +163,7 @@
           <div class="score-card">
             <div class="score-header">
               <span class="score-label">最终得分</span>
-              <span class="score-value" :class="getScoreClass(enrollment?.finalScore)">
+              <span class="score-value" :class="getScoreClass(enrollment?.finalScore, enrollment?.isPassed)">
                 {{ enrollment?.finalScore }}
               </span>
             </div>
@@ -328,7 +328,9 @@ const formatFileSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(1) + 'MB'
 }
 
-const getScoreClass = (score: number) => {
+const getScoreClass = (score: number, isPassed?: boolean | null) => {
+  if (isPassed === true) return 'score-high'
+  if (isPassed === false) return 'score-low'
   if (score >= 90) return 'score-high'
   if (score >= 60) return 'score-mid'
   return 'score-low'
@@ -377,7 +379,7 @@ const loadData = async () => {
 const loadMaterials = async (activityId: number) => {
   materialsLoading.value = true
   try {
-    const res = await getMaterialList({ periodId: activityId, size: 100 })
+    const res = await getMaterialList({ activityId, size: 100 })
     if (res.code === 200) {
       materials.value = res.data?.records || []
     }

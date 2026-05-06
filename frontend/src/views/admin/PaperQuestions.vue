@@ -124,7 +124,6 @@ const questionTotal = ref(0)
 const selectedToAdd = ref<any[]>([])
 
 const questionQuery = ref({
-  activityId: null as number | null,
   type: '',
   difficulty: null as number | null,
   page: 1,
@@ -146,11 +145,6 @@ const loadPaperInfo = async () => {
     const res = await getPaperById(paperId)
     if (res.code === 200) {
       paperInfo.value = res.data
-      // 设置活动ID用于加载题目
-      const data = res.data as any
-      if (data.activityId || data.periodId) {
-        questionQuery.value.activityId = data.activityId || data.periodId
-      }
     }
   } finally {
     loading.value = false
@@ -172,14 +166,9 @@ const loadSelectedQuestions = async () => {
 }
 
 const loadQuestions = async () => {
-  if (!questionQuery.value.activityId) {
-    ElMessage.warning('请先关联活动才能加载题目')
-    return
-  }
   questionLoading.value = true
   try {
     const res = await getQuestions({
-      periodId: questionQuery.value.activityId!,
       type: (questionQuery.value.type || undefined) as ExamQuestion['questionType'],
       difficulty: questionQuery.value.difficulty || undefined,
       page: questionQuery.value.page,

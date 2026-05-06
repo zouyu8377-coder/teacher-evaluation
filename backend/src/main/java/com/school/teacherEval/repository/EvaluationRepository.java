@@ -59,7 +59,7 @@ public interface EvaluationRepository extends JpaRepository<Evaluation, Long> {
     @Query("SELECT COUNT(e) FROM Evaluation e WHERE e.activityId = :activityId AND e.teacherId = :teacherId AND e.score IS NOT NULL")
     long countCompletedEvaluations(@Param("activityId") Long activityId, @Param("teacherId") Long teacherId);
     
-    @Query("SELECT COUNT(DISTINCT e.teacherId) FROM Evaluation e JOIN Activity a ON e.activityId = a.id WHERE a.level = :level AND e.finalScore >= 60 AND e.isPublished = true")
+    @Query("SELECT COUNT(DISTINCT e.teacherId) FROM Evaluation e JOIN Activity a ON e.activityId = a.id WHERE a.level = :level AND e.isPassed = true AND e.isPublished = true")
     long countPassedTeachersByLevel(@Param("level") Activity.Level level);
 
     @Query("SELECT COUNT(e) FROM Evaluation e WHERE e.activityId = :activityId AND e.evaluatorId = :evaluatorId AND e.score IS NOT NULL")

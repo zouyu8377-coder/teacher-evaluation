@@ -49,10 +49,6 @@ export const getEnrollmentInfo = (id: number) => {
   return api.get(`/activities/${id}/enrollment-info`) as Promise<ApiResponse<EnrollmentInfoVO>>
 }
 
-export const updateReviewerConfig = (id: number, reviewerCount: number, reviewerIds: string) => {
-  return api.put(`/activities/${id}/reviewer-config?reviewerCount=${reviewerCount}&reviewerIds=${encodeURIComponent(reviewerIds)}`) as Promise<ApiResponse<Activity>>
-}
-
 export const getActivityEnrollments = (activityId: number) => {
   return api.get(`/activities/${activityId}/enrollments`) as Promise<ApiResponse<EnrollmentTeacherVO[]>>
 }

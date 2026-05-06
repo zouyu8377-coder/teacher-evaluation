@@ -55,12 +55,12 @@
                 </template>
                 <template v-else-if="item.examRecordId">
                   <template v-if="!item.scorePublished">
-                    <el-button type="info" disabled>考试完成，等待评分</el-button>
+                    <el-button type="info" disabled>考试完成，等待成绩发布</el-button>
                   </template>
                   <template v-else>
                     <div class="score-display">
                       <span class="score-label">得分</span>
-                      <span class="score-value" :class="getScoreClass(item.finalScore)">
+                      <span class="score-value" :class="getScoreClass(item.finalScore, item.isPassed)">
                         {{ item.finalScore }}
                       </span>
                     </div>
@@ -95,7 +95,7 @@
                 <template v-else>
                   <div class="score-display">
                     <span class="score-label">得分</span>
-                    <span class="score-value" :class="getScoreClass(item.finalScore)">
+                    <span class="score-value" :class="getScoreClass(item.finalScore, item.isPassed)">
                       {{ item.finalScore }}
                     </span>
                   </div>
@@ -173,17 +173,18 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { storeToRefs } from 'pinia'
 import { useActivityStore } from '@/stores/activity'
 import type { Activity } from '@/api/types'
 
 const router = useRouter()
+const route = useRoute()
 const activityStore = useActivityStore()
 const { myEnrollments, loading } = storeToRefs(activityStore)
 
-const activeTab = ref('enrolled')
+const activeTab = ref((route.query.tab as string) || 'enrolled')
 const availableActivities = ref<(Activity & { enrollmentStatus?: string; canEnroll?: boolean; enrollmentInfo?: any })[]>([])
 
 const formatDateTime = (datetime: string | null) => {
@@ -240,7 +241,9 @@ const getStatusText = (item: any) => {
   return statusMap[status] || ''
 }
 
-const getScoreClass = (score: number | null) => {
+const getScoreClass = (score: number | null, isPassed?: boolean | null) => {
+  if (isPassed === true) return 'score-high'
+  if (isPassed === false) return 'score-low'
   if (score === null) return 'score-low'
   if (score >= 90) return 'score-high'
   if (score >= 60) return 'score-mid'

@@ -30,5 +30,6 @@ public class MyEnrollmentVO {
     private Long documentId;
     private Boolean scorePublished;
     private java.math.BigDecimal finalScore;
+    private Boolean isPassed;
     private String comment;
 }

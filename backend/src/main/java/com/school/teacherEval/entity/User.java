@@ -34,24 +34,31 @@ public class User {
     
     @Column(nullable = false)
     private Integer status = 1;
-    
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "teacher_level", nullable = false, length = 10)
+    private TeacherLevel teacherLevel = TeacherLevel.NONE;
+
+    @Column(name = "level_changed_at")
+    private LocalDateTime levelChangedAt;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
-    
+
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-    
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
     }
-    
+
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-    
+
     public enum Role {
         teacher, evaluator, admin
     }

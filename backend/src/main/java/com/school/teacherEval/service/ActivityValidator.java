@@ -74,7 +74,8 @@ public class ActivityValidator {
      * 校验活动启用前的业务规则
      */
     public void validateActivation(Activity activity) {
-        if (activity.getStatus() != Activity.Status.active) {
+        // C级为客观题考核，无需评分员
+        if (activity.getLevel() == Activity.Level.C) {
             return;
         }
         Integer reviewerCount = activity.getReviewerCount();
@@ -84,9 +85,6 @@ public class ActivityValidator {
         String reviewerIds = activity.getReviewerIds();
         if (reviewerIds == null || reviewerIds.isEmpty() || "[]".equals(reviewerIds)) {
             throw new BusinessException("评分人ID列表为空，请先添加评分人");
-        }
-        if (activity.getLevel() == Activity.Level.C && (activity.getExamPaperId() == null || activity.getExamPaperId() == 0L)) {
-            throw new BusinessException("C级活动必须先挂载试卷才能启用");
         }
     }
 

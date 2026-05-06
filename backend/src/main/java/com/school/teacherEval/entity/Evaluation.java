@@ -44,7 +44,10 @@ public class Evaluation {
     
     @Column(name = "final_score", precision = 5, scale = 2)
     private BigDecimal finalScore;
-    
+
+    @Column(name = "is_passed")
+    private Boolean isPassed;
+
     @Column(name = "exam_record_id")
     private Long examRecordId;
     

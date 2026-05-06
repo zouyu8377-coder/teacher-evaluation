@@ -7,7 +7,6 @@ import java.time.LocalDateTime;
 @Data
 @Entity
 @Table(name = "exam_papers", indexes = {
-    @Index(name = "idx_activity_id", columnList = "activity_id"),
     @Index(name = "idx_status", columnList = "status")
 })
 public class ExamPaper {
@@ -15,9 +14,6 @@ public class ExamPaper {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
-    @Column(name = "activity_id")
-    private Long activityId;
     
     @Column(nullable = false, length = 100)
     private String name;

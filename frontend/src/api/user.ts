@@ -36,8 +36,13 @@ export const updateUser = (id: number, data: {
   role?: string
   department?: string
   status?: number
+  password?: string
 }) => {
   return api.put(`/users/${id}`, data) as Promise<ApiResponse<UserVO>>
+}
+
+export const updateTeacherLevel = (id: number, level: string) => {
+  return api.put(`/users/${id}/level`, { level }) as Promise<ApiResponse<void>>
 }
 
 export const deleteUser = (id: number) => {

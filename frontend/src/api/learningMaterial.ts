@@ -4,7 +4,7 @@ import type { ApiResponse, PageResponse, LearningMaterialVO } from './types'
 export interface MaterialQuery {
   page?: number
   size?: number
-  periodId?: number
+  activityId?: number
 }
 
 export const getMaterialList = (params: MaterialQuery) => {

@@ -3,7 +3,9 @@ package com.school.teacherEval.controller;
 import com.school.teacherEval.dto.ApiResponse;
 import com.school.teacherEval.dto.UserCreateDTO;
 import com.school.teacherEval.dto.UserUpdateDTO;
+import com.school.teacherEval.entity.TeacherLevel;
 import com.school.teacherEval.entity.User;
+import com.school.teacherEval.service.TeacherLevelService;
 import com.school.teacherEval.service.UserService;
 import com.school.teacherEval.vo.PageVO;
 import com.school.teacherEval.vo.UserVO;
@@ -12,9 +14,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -24,6 +29,7 @@ import java.util.stream.Collectors;
 public class UserController {
     
     private final UserService userService;
+    private final TeacherLevelService teacherLevelService;
     
     @GetMapping
     @Operation(summary = "用户列表")
@@ -53,15 +59,7 @@ public class UserController {
     public ApiResponse<List<UserVO>> getTeachers() {
         List<User> teachers = userService.getTeachers();
         List<UserVO> result = teachers.stream()
-                .map(t -> new UserVO(
-                        t.getId(),
-                        t.getUsername(),
-                        t.getRealName(),
-                        null,
-                        t.getDepartment(),
-                        null,
-                        null
-                ))
+                .map(this::toVO)
                 .collect(Collectors.toList());
         return ApiResponse.success(result);
     }
@@ -72,15 +70,7 @@ public class UserController {
     public ApiResponse<List<UserVO>> getEvaluators() {
         List<User> evaluators = userService.getEvaluators();
         List<UserVO> result = evaluators.stream()
-                .map(e -> new UserVO(
-                        e.getId(),
-                        e.getUsername(),
-                        e.getRealName(),
-                        null,
-                        e.getDepartment(),
-                        null,
-                        null
-                ))
+                .map(this::toVO)
                 .collect(Collectors.toList());
         return ApiResponse.success(result);
     }
@@ -124,7 +114,24 @@ public class UserController {
                 user.getRole().name(),
                 user.getDepartment(),
                 user.getStatus(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getTeacherLevel() != null ? user.getTeacherLevel().name() : null,
+                user.getLevelChangedAt()
         );
+    }
+
+    @PutMapping("/{id}/level")
+    @Operation(summary = "修改教师等级")
+    @PreAuthorize("hasRole('admin')")
+    public ApiResponse<Void> changeTeacherLevel(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        String levelStr = body.get("level");
+        if (levelStr == null || levelStr.isEmpty()) {
+            return ApiResponse.error(400, "等级不能为空");
+        }
+        TeacherLevel newLevel = TeacherLevel.valueOf(levelStr);
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User admin = userService.getCurrentUser(auth.getName());
+        teacherLevelService.changeLevel(id, newLevel, admin.getId());
+        return ApiResponse.success("修改成功", null);
     }
 }

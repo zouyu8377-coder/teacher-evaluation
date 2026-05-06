@@ -50,12 +50,28 @@ export const getAvailablePeriods = () => {
   return api.get('/periods/available') as Promise<ApiResponse<Period[]>>
 }
 
+export interface PeriodEnrollment {
+  id: number
+  periodId: number
+  teacherId: number
+  status: string
+  enrolledAt: string
+}
+
+export interface EnrolledTeacher {
+  id: number
+  username: string
+  realName: string
+  department: string
+  enrolledAt: string
+}
+
 export const getMyEnrollments = () => {
-  return api.get('/periods/my-enrollments') as Promise<ApiResponse<any[]>>
+  return api.get('/periods/my-enrollments') as Promise<ApiResponse<PeriodEnrollment[]>>
 }
 
 export const getPeriodEnrollments = (id: number) => {
-  return api.get(`/periods/${id}/enrollments`) as Promise<ApiResponse<any[]>>
+  return api.get(`/periods/${id}/enrollments`) as Promise<ApiResponse<PeriodEnrollment[]>>
 }
 
 export const removeEnrollment = (periodId: number, teacherId: number) => {
@@ -63,5 +79,5 @@ export const removeEnrollment = (periodId: number, teacherId: number) => {
 }
 
 export const getEnrolledTeachers = () => {
-  return api.get('/periods/enrolled-teachers') as Promise<ApiResponse<any[]>>
+  return api.get('/periods/enrolled-teachers') as Promise<ApiResponse<EnrolledTeacher[]>>
 }

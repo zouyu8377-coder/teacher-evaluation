@@ -39,7 +39,7 @@ public class ActivityService {
     }
     
     public List<Activity> getActiveByLevel(Activity.Level level) {
-        return activityRepository.findByLevelAndStatus(level, Activity.Status.active);
+        return activityRepository.findByLevel(level);
     }
     
     public Activity getById(Long id) {
@@ -54,12 +54,12 @@ public class ActivityService {
         if (activity.getReviewerCount() == null) {
             activity.setReviewerCount(0);
         }
-        // 默认状态为草稿
-        if (activity.getStatus() == null) {
-            activity.setStatus(Activity.Status.draft);
-        }
         // C级固定为考试，其他级别固定为文档
         activity.setHasExam(activity.getLevel() == Activity.Level.C);
+
+        // 创建时即校验考核员配置
+        activityValidator.validateActivation(activity);
+
         return activityRepository.save(activity);
     }
     
@@ -75,14 +75,6 @@ public class ActivityService {
         if (updated.getLevel() != null) activity.setLevel(updated.getLevel());
         if (updated.getDescription() != null) activity.setDescription(updated.getDescription());
         if (updated.getMaxParticipants() != null) activity.setMaxParticipants(updated.getMaxParticipants());
-        if (updated.getStatus() != null) {
-            Activity.Status oldStatus = activity.getStatus();
-            activity.setStatus(updated.getStatus());
-            // 只有在状态切换为 active 时才执行启用校验
-            if (updated.getStatus() == Activity.Status.active && oldStatus != Activity.Status.active) {
-                activityValidator.validateActivation(activity);
-            }
-        }
         if (updated.getEnrollmentStart() != null) activity.setEnrollmentStart(updated.getEnrollmentStart());
         if (updated.getEnrollmentEnd() != null) activity.setEnrollmentEnd(updated.getEnrollmentEnd());
         if (updated.getExamStart() != null) activity.setExamStart(updated.getExamStart());
@@ -117,32 +109,32 @@ public class ActivityService {
     
     @Transactional
     public void delete(Long id) {
-        validateDelete(id);
+        Activity activity = getById(id);
+
+        // 解除所有报名关系
+        List<PeriodEnrollment> enrollments = enrollmentRepository.findByActivityId(id);
+        for (PeriodEnrollment enrollment : enrollments) {
+            enrollmentRepository.delete(enrollment);
+        }
+
         activityRepository.deleteById(id);
+        log.info("删除活动成功: {}, 名称: {}, 已解除 {} 人报名", id, activity.getName(), enrollments.size());
     }
     
     public List<Activity> getAvailableActivities() {
         return activityRepository.findAvailableActivities();
     }
-    
+
     public List<Activity> getActiveByDate(LocalDate date) {
         return activityRepository.findActiveByDate(date);
     }
-    
+
     public List<Activity> getAllActiveOrderByLevel() {
-        return activityRepository.findAllActiveOrderByLevel();
+        return activityRepository.findAllOrderByLevel();
     }
     
     public List<Activity> getByReviewerId(Long evaluatorId) {
         return activityRepository.findByReviewerId(evaluatorId);
-    }
-    
-    @Transactional
-    public Activity updateReviewerConfig(Long id, Integer reviewerCount, String reviewerIds) {
-        Activity activity = getById(id);
-        activity.setReviewerCount(reviewerCount);
-        activity.setReviewerIds(reviewerIds);
-        return activityRepository.save(activity);
     }
     
     public boolean canEnroll(Long activityId, Long teacherId) {
@@ -170,13 +162,12 @@ public class ActivityService {
 
             // 检查通过的级别是否是目标级别的前置级别之一
             if (Activity.Level.canProgressTo(passedLevel, targetLevel)) {
-                // 需要确认该活动已发布成绩且及格
+                // 需要确认该活动已发布成绩且通过
                 List<Evaluation> evals = evaluationRepository.findByTeacherIdAndActivityId(teacherId, enrollment.getActivityId());
                 for (Evaluation eval : evals) {
                     if (eval.getStatus() == Evaluation.Status.submitted &&
                         Boolean.TRUE.equals(eval.getIsPublished()) &&
-                        eval.getFinalScore() != null &&
-                        eval.getFinalScore().compareTo(new java.math.BigDecimal("60")) >= 0) {
+                        Boolean.TRUE.equals(eval.getIsPassed())) {
                         return true;
                     }
                 }
@@ -187,7 +178,7 @@ public class ActivityService {
     }
     
     public List<Activity> getAvailableForTeacher(Long teacherId) {
-        List<Activity> activities = activityRepository.findAllActiveOrderByLevel();
+        List<Activity> activities = activityRepository.findAllOrderByLevel();
         return activities.stream()
             .filter(a -> canEnroll(a.getId(), teacherId))
             .filter(a -> !enrollmentRepository.existsByActivityIdAndTeacherIdAndStatus(

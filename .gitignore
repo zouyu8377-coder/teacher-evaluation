@@ -35,9 +35,14 @@ deploy/frontend/
 deploy/*.jar
 *.sock
 
-# IDE
-.idea/
-.vscode/
-*.iml
-*.ipr
-*.iws
+# Claude / MCP
+.claude/
+.claudeignore
+.playwright-mcp/
+
+# SSH keys
+*.pem
+
+# Misc
+activity-detail-8.yml
+others/stitch/

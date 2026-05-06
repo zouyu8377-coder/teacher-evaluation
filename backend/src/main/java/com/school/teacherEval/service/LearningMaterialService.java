@@ -2,6 +2,7 @@ package com.school.teacherEval.service;
 
 import com.school.teacherEval.config.MinioConfig;
 import com.school.teacherEval.entity.LearningMaterial;
+import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.LearningMaterialRepository;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -40,7 +41,7 @@ public class LearningMaterialService {
     public LearningMaterial getMaterialById(Long id) {
         LearningMaterial material = materialRepository.findActiveById(id);
         if (material == null) {
-            throw new RuntimeException("资料不存在");
+            throw new BusinessException("资料不存在");
         }
         return material;
     }
@@ -88,7 +89,7 @@ public class LearningMaterialService {
         LearningMaterial material = getMaterialById(id);
         
         if (!material.getCreatedBy().equals(currentUserId) && !role.equals("admin")) {
-            throw new RuntimeException("无权限修改此资料");
+            throw new BusinessException("无权限修改此资料");
         }
         
         if (title != null) {
@@ -106,7 +107,7 @@ public class LearningMaterialService {
         LearningMaterial material = getMaterialById(id);
         
         if (!material.getCreatedBy().equals(currentUserId) && !role.equals("admin")) {
-            throw new RuntimeException("无权限删除此资料");
+            throw new BusinessException("无权限删除此资料");
         }
         
         material.setIsDeleted(1);
@@ -128,7 +129,7 @@ public class LearningMaterialService {
             if (material.getActivityId() != null) {
                 boolean isEnrolled = enrollmentService.isEnrolledByActivity(material.getActivityId(), userId);
                 if (!isEnrolled) {
-                    throw new RuntimeException("您尚未报名该活动，无法下载学习资料");
+                    throw new BusinessException("您尚未报名该活动，无法下载学习资料");
                 }
             }
         }

@@ -17,7 +17,7 @@
         <el-table-column prop="activityName" label="活动" />
         <el-table-column prop="score" label="得分">
           <template #default="{ row }">
-            <el-tag :type="row.score >= 90 ? 'success' : row.score >= 60 ? 'warning' : 'danger'">
+            <el-tag :type="row.isPassed === true ? 'success' : row.isPassed === false ? 'danger' : 'warning'">
               {{ row.score }}
             </el-tag>
           </template>

@@ -36,15 +36,24 @@
           </template>
         </el-table-column>
         <el-table-column prop="department" label="部门" />
+        <el-table-column prop="teacherLevel" label="等级" width="100">
+          <template #default="{ row }">
+            <el-tag v-if="row.teacherLevel" :type="getLevelTagType(row.teacherLevel)">
+              {{ row.teacherLevel }}
+            </el-tag>
+            <el-tag v-else type="info">无级别</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态">
           <template #default="{ row }">
             <el-tag :type="row.status === 1 ? 'success' : 'info'">{{ row.status === 1 ? '启用' : '禁用' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" />
-        <el-table-column label="操作" width="180">
+        <el-table-column label="操作" width="220">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+            <el-button v-if="row.role === 'teacher'" type="warning" link @click="handleChangeLevel(row)">修改等级</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -68,6 +77,14 @@
         <el-form-item v-if="!editId" label="密码" prop="password">
           <el-input v-model="form.password" type="password" />
         </el-form-item>
+        <template v-if="editId">
+          <el-form-item label="重置密码">
+            <el-checkbox v-model="resetPassword">重置密码</el-checkbox>
+          </el-form-item>
+          <el-form-item v-if="resetPassword" label="新密码" prop="newPassword">
+            <el-input v-model="form.newPassword" type="password" placeholder="请输入新密码" />
+          </el-form-item>
+        </template>
         <el-form-item label="姓名" prop="realName">
           <el-input v-model="form.realName" />
         </el-form-item>
@@ -87,13 +104,36 @@
         <el-button type="primary" :loading="loading" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="levelDialogVisible" title="修改教师等级" width="400px">
+      <el-form label-width="80px">
+        <el-form-item label="当前等级">
+          <el-tag v-if="levelForm.currentLevel" :type="getLevelTagType(levelForm.currentLevel)">
+            {{ levelForm.currentLevel }}
+          </el-tag>
+          <el-tag v-else type="info">无级别</el-tag>
+        </el-form-item>
+        <el-form-item label="新等级">
+          <el-select v-model="levelForm.newLevel" placeholder="请选择等级">
+            <el-option label="无级别" value="NONE" />
+            <el-option label="C级" value="C" />
+            <el-option label="B级" value="B" />
+            <el-option label="A级" value="A" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="levelDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="levelLoading" @click="handleLevelSubmit">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getUserList, createUser, updateUser, deleteUser } from '@/api/user'
+import { getUserList, createUser, updateUser, deleteUser, updateTeacherLevel } from '@/api/user'
 
 const query = reactive({
   page: 1,
@@ -112,9 +152,20 @@ const editId = ref<number | null>(null)
 const form = reactive({
   username: '',
   password: '',
+  newPassword: '',
   realName: '',
   role: 'teacher',
   department: ''
+})
+
+const resetPassword = ref(false)
+
+const levelDialogVisible = ref(false)
+const levelLoading = ref(false)
+const levelForm = reactive({
+  teacherId: null as number | null,
+  currentLevel: '',
+  newLevel: ''
 })
 
 const rules = {
@@ -146,9 +197,11 @@ const handleAdd = () => {
 
 const handleEdit = (row: any) => {
   editId.value = row.id
+  resetPassword.value = false
   Object.assign(form, {
     username: row.username,
     password: '',
+    newPassword: '',
     realName: row.realName,
     role: row.role,
     department: row.department
@@ -163,12 +216,16 @@ const handleSubmit = async () => {
   loading.value = true
   try {
     if (editId.value) {
-      const res = await updateUser(editId.value, {
+      const payload: any = {
         realName: form.realName,
         role: form.role,
         department: form.department,
         status: 1
-      })
+      }
+      if (resetPassword.value && form.newPassword) {
+        payload.password = form.newPassword
+      }
+      const res = await updateUser(editId.value, payload)
       if (res.code === 200) {
         ElMessage.success('更新成功')
         dialogVisible.value = false
@@ -198,6 +255,41 @@ const handleDelete = async (row: any) => {
     }
   } finally {
     loading.value = false
+  }
+}
+
+const getLevelTagType = (level: string) => {
+  const typeMap: Record<string, any> = {
+    NONE: 'info',
+    C: 'success',
+    B: 'warning',
+    A: 'danger'
+  }
+  return typeMap[level] || 'info'
+}
+
+const handleChangeLevel = (row: any) => {
+  levelForm.teacherId = row.id
+  levelForm.currentLevel = row.teacherLevel || ''
+  levelForm.newLevel = row.teacherLevel || ''
+  levelDialogVisible.value = true
+}
+
+const handleLevelSubmit = async () => {
+  if (!levelForm.newLevel) {
+    ElMessage.warning('请选择新等级')
+    return
+  }
+  levelLoading.value = true
+  try {
+    const res = await updateTeacherLevel(levelForm.teacherId!, levelForm.newLevel)
+    if (res.code === 200) {
+      ElMessage.success('修改成功')
+      levelDialogVisible.value = false
+      loadData()
+    }
+  } finally {
+    levelLoading.value = false
   }
 }
 

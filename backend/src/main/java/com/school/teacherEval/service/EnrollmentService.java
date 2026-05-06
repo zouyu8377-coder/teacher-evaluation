@@ -4,6 +4,7 @@ import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Evaluation;
 import com.school.teacherEval.entity.PeriodEnrollment;
 import com.school.teacherEval.entity.User;
+import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.ActivityRepository;
 import com.school.teacherEval.repository.EnrollmentRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
@@ -30,9 +31,9 @@ public class EnrollmentService {
     }
     
     public List<Activity> getAvailableActivities(Long teacherId) {
-        List<Activity> allActive = activityRepository.findByStatus(Activity.Status.active);
-        
-        return allActive.stream()
+        List<Activity> allActivities = activityRepository.findAll();
+
+        return allActivities.stream()
             .filter(activity -> canEnroll(teacherId, activity))
             .filter(activity -> !isEnrolledByActivity(activity.getId(), teacherId))
             .toList();
@@ -63,13 +64,12 @@ public class EnrollmentService {
 
             // 检查通过的级别是否是目标级别的前置级别之一
             if (Activity.Level.canProgressTo(passedLevel, targetLevel)) {
-                // 需要确认该活动已发布成绩且及格
+                // 需要确认该活动已发布成绩且通过
                 var evals = evaluationRepository.findByTeacherIdAndActivityId(teacherId, enrollment.getActivityId());
                 for (var eval : evals) {
                     if (eval.getStatus() == Evaluation.Status.submitted &&
                         Boolean.TRUE.equals(eval.getIsPublished()) &&
-                        eval.getFinalScore() != null &&
-                        eval.getFinalScore().compareTo(new java.math.BigDecimal("60")) >= 0) {
+                        Boolean.TRUE.equals(eval.getIsPassed())) {
                         return true;
                     }
                 }
@@ -82,42 +82,38 @@ public class EnrollmentService {
     @Transactional
     public PeriodEnrollment enroll(Long activityId, Long teacherId) {
         if (isEnrolledByActivity(activityId, teacherId)) {
-            throw new RuntimeException("您已报名该活动");
+            throw new BusinessException("您已报名该活动");
         }
-        
+
         Activity activity = activityRepository.findById(activityId)
-            .orElseThrow(() -> new RuntimeException("活动不存在"));
-        
-        if (activity.getStatus() != Activity.Status.active) {
-            throw new RuntimeException("该活动未开启");
-        }
-        
+            .orElseThrow(() -> new BusinessException("活动不存在"));
+
         LocalDateTime now = LocalDateTime.now();
         if (activity.getEnrollmentStart() != null && now.isBefore(activity.getEnrollmentStart())) {
-            throw new RuntimeException("报名尚未开始");
+            throw new BusinessException("报名尚未开始");
         }
         if (activity.getEnrollmentEnd() != null && now.isAfter(activity.getEnrollmentEnd())) {
-            throw new RuntimeException("报名已结束");
+            throw new BusinessException("报名已结束");
         }
-        
+
         if (activity.getMaxParticipants() != null && activity.getMaxParticipants() > 0) {
             long enrolledCount = enrollmentRepository.findByActivityId(activityId).stream()
                 .filter(e -> e.getStatus() == PeriodEnrollment.Status.enrolled)
                 .count();
             if (enrolledCount >= activity.getMaxParticipants()) {
-                throw new RuntimeException("该活动报名人数已满");
+                throw new BusinessException("该活动报名人数已满");
             }
         }
-        
+
         if (!canEnroll(teacherId, activity)) {
-            throw new RuntimeException("您需要先通过上一级别考核才能报名");
+            throw new BusinessException("您需要先通过上一级别考核才能报名");
         }
-        
+
         PeriodEnrollment enrollment = new PeriodEnrollment();
         enrollment.setActivityId(activityId);
         enrollment.setTeacherId(teacherId);
         enrollment.setStatus(PeriodEnrollment.Status.enrolled);
-        
+
         return enrollmentRepository.save(enrollment);
     }
     

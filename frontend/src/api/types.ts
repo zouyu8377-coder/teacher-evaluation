@@ -22,6 +22,8 @@ export interface UserVO {
   department: string
   status?: number
   createdAt?: string
+  teacherLevel?: string
+  levelChangedAt?: string
 }
 
 // 活动（已有 Activity 接口，复用）
@@ -31,7 +33,7 @@ export interface Activity {
   level: 'C' | 'B2' | 'B1' | 'A2' | 'A1'
   description: string
   maxParticipants: number
-  status: 'draft' | 'active' | 'closed'
+  timeStatus?: 'not_started' | 'in_progress' | 'ended'
   scoresPublished?: boolean
   enrollmentStart: string
   enrollmentEnd: string
@@ -68,6 +70,7 @@ export interface MyEnrollmentVO {
   documentId: number | null
   scorePublished: boolean
   finalScore: number | null
+  isPassed: boolean | null
   comment: string | null
 }
 
@@ -110,6 +113,7 @@ export interface EnrollmentInfoVO {
   documentCreatedAt: string | null
   scorePublished: boolean
   finalScore: number | null
+  isPassed: boolean | null
   comment: string | null
 }
 
@@ -158,6 +162,7 @@ export interface EvaluationVO {
   status: string
   isPublished: boolean
   isLocked: boolean
+  isPassed: boolean | null
   createdAt: string
   evaluatorName: string
   teacherName: string

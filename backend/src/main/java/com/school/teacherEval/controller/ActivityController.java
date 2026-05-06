@@ -120,6 +120,7 @@ public class ActivityController {
                     docOpt.map(Document::getId).orElse(null),
                     publishedEval.isPresent(),
                     publishedEval.map(Evaluation::getFinalScore).orElse(null),
+                    publishedEval.map(Evaluation::getIsPassed).orElse(null),
                     publishedEval.map(Evaluation::getComment).orElse(null)
                 );
             })
@@ -151,15 +152,6 @@ public class ActivityController {
         return ApiResponse.success("删除成功", null);
     }
     
-    @PutMapping(value = "/{id}/reviewer-config", produces = "application/json;charset=UTF-8")
-    @PreAuthorize("hasRole('admin')")
-    public ApiResponse<Activity> updateReviewerConfig(
-            @PathVariable Long id,
-            @RequestParam Integer reviewerCount,
-            @RequestParam String reviewerIds) {
-        return ApiResponse.success(activityService.updateReviewerConfig(id, reviewerCount, reviewerIds));
-    }
-
     @GetMapping(value = "/{id}/review-progress", produces = "application/json;charset=UTF-8")
     @PreAuthorize("hasRole('admin')")
     public ApiResponse<ReviewProgressVO> getReviewProgress(@PathVariable Long id) {
@@ -297,6 +289,7 @@ public class ActivityController {
                 Evaluation eval = publishedEval.get();
                 vo.setScorePublished(true);
                 vo.setFinalScore(eval.getFinalScore());
+                vo.setIsPassed(eval.getIsPassed());
                 vo.setComment(eval.getComment());
             } else {
                 vo.setScorePublished(false);
@@ -309,12 +302,8 @@ public class ActivityController {
     @PostMapping(value = "/{id}/enroll", produces = "application/json;charset=UTF-8")
     public ApiResponse<Void> enroll(@PathVariable Long id) {
         User user = getCurrentUser();
-        try {
-            enrollmentService.enroll(id, user.getId());
-            return ApiResponse.success("报名成功", null);
-        } catch (RuntimeException e) {
-            return ApiResponse.error(e.getMessage());
-        }
+        enrollmentService.enroll(id, user.getId());
+        return ApiResponse.success("报名成功", null);
     }
 
     @GetMapping(value = "/{id}/enrollments", produces = "application/json;charset=UTF-8")
@@ -328,10 +317,13 @@ public class ActivityController {
                 LocalDateTime submittedAt = null;
                 String submissionStatus = "not_started";
 
-                if ("C".equals(activity.getLevel())) {
+                java.math.BigDecimal examScore = null;
+                Boolean isPassed = null;
+                if (activity.getLevel() == Activity.Level.C) {
                     ExamRecord examRecord = examRecordService.getRecordByTeacherAndActivity(teacher.getId(), id);
                     if (examRecord != null) {
                         examRecordId = examRecord.getId();
+                        examScore = examRecord.getScore();
                         if (examRecord.getSubmittedAt() != null) {
                             submittedAt = examRecord.getSubmittedAt();
                             submissionStatus = "submitted";
@@ -342,6 +334,10 @@ public class ActivityController {
                             } else {
                                 submissionStatus = examRecord.getStatus() != null ? examRecord.getStatus().name() : "not_started";
                             }
+                        }
+                        // 成绩已发布时计算是否通过
+                        if (Boolean.TRUE.equals(activity.getScoresPublished()) && examScore != null && activity.getPassingScore() != null) {
+                            isPassed = examScore.compareTo(activity.getPassingScore()) >= 0;
                         }
                     }
                 } else {
@@ -360,7 +356,9 @@ public class ActivityController {
                     enrollment != null ? enrollment.getEnrolledAt() : null,
                     examRecordId,
                     submittedAt,
-                    submissionStatus
+                    submissionStatus,
+                    examScore,
+                    isPassed
                 );
             })
             .collect(java.util.stream.Collectors.toList());

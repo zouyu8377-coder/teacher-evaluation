@@ -21,6 +21,7 @@ public class EvaluationVO {
     private String status;
     private Boolean isPublished;
     private Boolean isLocked;
+    private Boolean isPassed;
     private LocalDateTime createdAt;
     private String evaluatorName;
     private String teacherName;

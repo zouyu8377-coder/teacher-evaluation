@@ -11,13 +11,8 @@
           </div>
         </div>
       </template>
-      
+
       <el-form inline>
-        <el-form-item label="活动">
-          <el-select v-model="query.activityId" placeholder="请选择" clearable filterable @change="loadData" style="width: 200px;">
-            <el-option v-for="p in activities" :key="p.id" :label="p.name" :value="p.id" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="题型">
           <el-select v-model="query.type" placeholder="全部" clearable filterable @change="loadData" style="width: 120px;">
             <el-option label="单选题" value="single" />
@@ -49,7 +44,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="query.page"
         v-model:page-size="query.size"
@@ -132,7 +127,6 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getQuestions, createQuestion, updateQuestion, deleteQuestion, importQuestions, downloadQuestionTemplate } from '@/api/exam'
-import { getActivityList } from '@/api/activity'
 
 const loading = ref(false)
 const dialogVisible = ref(false)
@@ -143,19 +137,16 @@ const formRef = ref()
 const uploadRef = ref()
 const selectedFile = ref<File | null>(null)
 
-const activities = ref<any[]>([])
 const tableData = ref<any[]>([])
 const total = ref(0)
 
 const query = reactive({
-  activityId: null as number | null,
   type: '' as '' | 'single' | 'multiple',
   page: 1,
   size: 10
 })
 
 const form = reactive({
-  activityId: null as number | null,
   questionText: '',
   questionType: 'single' as 'single' | 'multiple',
   options: [
@@ -176,23 +167,10 @@ const rules = {
   correctAnswer: [{ required: true, message: '请输入正确答案', trigger: 'blur' }]
 }
 
-const loadActivities = async () => {
-  const res = await getActivityList()
-  if (res.code === 200) {
-    activities.value = res.data
-    if (activities.value.length > 0 && !query.activityId) {
-      query.activityId = activities.value[0].id
-      loadData()
-    }
-  }
-}
-
 const loadData = async () => {
-  if (!query.activityId) return
   loading.value = true
   try {
     const res = await getQuestions({
-      periodId: query.activityId!,
       type: query.type || undefined,
       page: query.page,
       size: query.size
@@ -209,7 +187,6 @@ const loadData = async () => {
 const handleAdd = () => {
   editId.value = null
   Object.assign(form, {
-    activityId: query.activityId,
     questionText: '',
     questionType: 'single',
     options: [
@@ -235,7 +212,6 @@ const handleEdit = (row: any) => {
     options = []
   }
   Object.assign(form, {
-    activityId: row.activityId,
     questionText: row.questionText,
     questionType: row.questionType,
     options: options.length > 0 ? options : [
@@ -268,11 +244,10 @@ const removeOption = (idx: number) => {
 const handleSubmit = async () => {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
-  
+
   const optionsJson = JSON.stringify(form.options.filter(o => o.text))
-  
+
   const data = {
-    activityId: query.activityId,
     questionText: form.questionText,
     questionType: form.questionType,
     options: optionsJson,
@@ -281,7 +256,7 @@ const handleSubmit = async () => {
     difficulty: form.difficulty,
     explanation: form.explanation
   }
-  
+
   loading.value = true
   try {
     let res
@@ -350,7 +325,7 @@ const handleImport = async () => {
 
   importing.value = true
   try {
-    const res = await importQuestions(selectedFile.value, query.activityId!)
+    const res = await importQuestions(selectedFile.value)
     if (res.code === 200) {
       ElMessage.success(`导入成功，共${res.data}道题目`)
       showImport.value = false
@@ -365,7 +340,7 @@ const handleImport = async () => {
 }
 
 onMounted(() => {
-  loadActivities()
+  loadData()
 })
 </script>
 

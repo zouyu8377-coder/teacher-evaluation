@@ -1,4 +1,5 @@
 import request from './index'
+import type { ApiResponse } from './types'
 
 export interface LevelPassedCount {
   C: number
@@ -9,7 +10,7 @@ export interface LevelPassedCount {
 }
 
 export const getLevelPassedCount = () => {
-  return request.get('/stats/level-passed') as Promise<{ code: number; data: LevelPassedCount }>
+  return request.get('/stats/level-passed') as Promise<ApiResponse<LevelPassedCount>>
 }
 
 export interface ActivityInfo {
@@ -23,5 +24,5 @@ export interface ActivityInfo {
 }
 
 export const getActiveActivities = () => {
-  return request.get('/stats/active-activities') as Promise<{ code: number; data: ActivityInfo[] }>
+  return request.get('/stats/active-activities') as Promise<ApiResponse<ActivityInfo[]>>
 }

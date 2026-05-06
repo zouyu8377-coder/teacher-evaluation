@@ -33,6 +33,6 @@ export const getActivityEvaluationSummary = (activityId: number, teacherId?: num
   return api.get(`/evaluations/activity/${activityId}/summary`, { params: { teacherId } }) as Promise<ApiResponse<EvaluationSummaryVO>>
 }
 
-export const publishEvaluationScores = (activityId: number, teacherId?: number) => {
-  return api.post('/evaluations/publish', null, { params: { activityId, teacherId } }) as Promise<ApiResponse<number>>
+export const publishEvaluationScores = (activityId: number, passingScore: number, teacherId?: number) => {
+  return api.post('/evaluations/publish', null, { params: { activityId, passingScore, teacherId } }) as Promise<ApiResponse<number>>
 }

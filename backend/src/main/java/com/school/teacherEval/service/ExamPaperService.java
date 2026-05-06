@@ -1,9 +1,13 @@
 package com.school.teacherEval.service;
 
 import com.school.teacherEval.entity.Activity;
+import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.entity.ExamPaper;
+import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.entity.ExamQuestion;
+import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.entity.PaperQuestion;
+import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.ExamPaperRepository;
 import com.school.teacherEval.repository.ExamQuestionRepository;
 import com.school.teacherEval.repository.PaperQuestionRepository;
@@ -27,13 +31,13 @@ public class ExamPaperService {
     private final PaperQuestionRepository paperQuestionRepository;
     private final ActivityService activityService;
     
-    public Page<ExamPaper> getPapers(Long activityId, int page, int size) {
+    public Page<ExamPaper> getPapers(int page, int size) {
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "id"));
-        return paperRepository.findByActivityId(activityId, pageable);
+        return paperRepository.findAll(pageable);
     }
-    
-    public List<ExamPaper> getPapersByActivity(Long activityId) {
-        return paperRepository.findByActivityId(activityId);
+
+    public List<ExamPaper> getAllPapers() {
+        return paperRepository.findAll();
     }
     
     public ExamPaper getById(Long id) {
@@ -130,16 +134,13 @@ public class ExamPaperService {
     @Transactional
     public void bindToActivity(Long paperId, Long activityId) {
         Activity activity = activityService.getById(activityId);
-        
+
         if (activity.getLevel() != Activity.Level.C) {
-            throw new RuntimeException("只有C级活动才能绑定试卷");
+            throw new BusinessException("只有C级活动才能绑定试卷");
         }
-        
+
         ExamPaper paper = getById(paperId);
-        
-        paper.setActivityId(activityId);
-        paperRepository.save(paper);
-        
+
         activity.setExamPaperId(paperId);
         activity.setHasExam(true);
         if (paper.getDurationMinutes() != null) {

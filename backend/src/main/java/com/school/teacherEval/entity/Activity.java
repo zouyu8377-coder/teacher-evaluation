@@ -1,7 +1,9 @@
 package com.school.teacherEval.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Data;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -10,8 +12,7 @@ import java.util.List;
 @Data
 @Entity
 @Table(name = "activities", indexes = {
-    @Index(name = "idx_level", columnList = "level"),
-    @Index(name = "idx_status", columnList = "status")
+    @Index(name = "idx_level", columnList = "level")
 })
 public class Activity {
     
@@ -31,10 +32,6 @@ public class Activity {
     
     @Column(name = "max_participants")
     private Integer maxParticipants;
-    
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private Status status = Status.draft;
     
     @Column(name = "enrollment_start", nullable = false)
     private LocalDateTime enrollmentStart;
@@ -83,6 +80,9 @@ public class Activity {
 
     @Column(name = "scores_published_at")
     private LocalDateTime scoresPublishedAt;
+
+    @Column(name = "passing_score", precision = 5, scale = 2)
+    private BigDecimal passingScore;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -198,7 +198,25 @@ public class Activity {
         }
     }
     
-    public enum Status {
-        draft, active, closed
+    public enum TimeStatus {
+        not_started, in_progress, ended
+    }
+
+    @JsonProperty("timeStatus")
+    public TimeStatus getTimeStatus() {
+        LocalDateTime now = LocalDateTime.now();
+        if (enrollmentStart != null && now.isBefore(enrollmentStart)) {
+            return TimeStatus.not_started;
+        }
+        LocalDateTime end = null;
+        if (level == Level.C && examEnd != null) {
+            end = examEnd;
+        } else if (materialEnd != null) {
+            end = materialEnd;
+        }
+        if (end != null && now.isAfter(end)) {
+            return TimeStatus.ended;
+        }
+        return TimeStatus.in_progress;
     }
 }

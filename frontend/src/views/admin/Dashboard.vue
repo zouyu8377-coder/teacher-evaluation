@@ -75,8 +75,8 @@
             <h4 class="activity-name">{{ activity.name }}</h4>
             <p class="activity-desc">{{ activity.description || '暂无描述' }}</p>
           </div>
-          <span class="activity-status" :class="'status-' + activity.status">
-            {{ getStatusText(activity.status) }}
+          <span class="activity-status" :class="'time-status-' + activity.timeStatus">
+            {{ getTimeStatusText(activity.timeStatus) }}
           </span>
         </router-link>
       </div>
@@ -152,13 +152,13 @@ const levelStats = ref<LevelStats>({
   C: 0
 })
 
-const getStatusText = (status: string) => {
+const getTimeStatusText = (timeStatus?: string) => {
   const map: Record<string, string> = {
-    active: '进行中',
-    draft: '草稿',
-    closed: '已结束'
+    not_started: '未开始',
+    in_progress: '进行中',
+    ended: '已结束'
   }
-  return map[status] || '未知'
+  return map[timeStatus || ''] || '-'
 }
 
 const loadData = async () => {
@@ -465,17 +465,17 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.activity-status.status-active {
-  background: #dcfce7;
-  color: #16a34a;
-}
-
-.activity-status.status-draft {
+.activity-status.time-status-not_started {
   background: #f1f5f9;
   color: #64748b;
 }
 
-.activity-status.status-closed {
+.activity-status.time-status-in_progress {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.activity-status.time-status-ended {
   background: #fee2e2;
   color: #dc2626;
 }

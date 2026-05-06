@@ -28,4 +28,8 @@ public interface PaperQuestionRepository extends JpaRepository<PaperQuestion, Lo
     List<PaperQuestion> findByPaperIdWithQuestions(@Param("paperId") Long paperId);
     
     long countByPaperId(Long paperId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    void deleteByQuestionId(Long questionId);
 }

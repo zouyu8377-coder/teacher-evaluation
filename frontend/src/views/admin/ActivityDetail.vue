@@ -20,19 +20,25 @@
           </div>
           <div class="activity-title">
             <h1>{{ activity.name }}</h1>
-            <span class="activity-status" :class="'status-' + activity.status">
-              {{ getStatusText(activity.status) }}
+            <span class="activity-status" :class="'time-status-' + activity.timeStatus">
+              {{ getTimeStatusText(activity.timeStatus) }}
             </span>
-          </div>
-          <div class="activity-actions">
-            <el-switch
-              v-model="activity.status"
-              :active-value="'active'"
-              :inactive-value="'closed'"
-              active-text="进行中"
-              inactive-text="已关闭"
-              @change="handleToggleStatus"
-            />
+            <template v-if="!activity.scoresPublished">
+              <el-button
+                :type="canPublish ? 'success' : 'info'"
+                :disabled="!canPublish"
+                size="small"
+                @click="handlePublishScores"
+                style="margin-left: 12px;"
+              >
+                {{ canPublish ? '发布成绩' : '暂不可发布' }}
+              </el-button>
+            </template>
+            <template v-else>
+              <el-tag type="success" size="small" style="margin-left: 12px;">
+                成绩已发布，通过分数线 {{ activity.passingScore }} 分
+              </el-tag>
+            </template>
           </div>
         </div>
         <p class="activity-desc">{{ activity.description || '暂无描述' }}</p>
@@ -65,8 +71,8 @@
             <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">how_to_reg</span>
           </div>
           <div class="stat-info">
-            <p class="stat-label">评分人数</p>
-            <h3 class="stat-value">{{ activity.reviewerCount || 0 }}</h3>
+            <p class="stat-label">{{ activity.level === 'C' ? '考核形式' : '评分人数' }}</p>
+            <h3 class="stat-value">{{ activity.level === 'C' ? '客观题' : (activity.reviewerCount || 0) }}</h3>
           </div>
         </div>
 
@@ -113,17 +119,13 @@
         </div>
       </div>
 
-      <!-- 评分配置 -->
-      <div class="reviewer-card">
+      <!-- 评分配置 (非C级显示) -->
+      <div v-if="activity.level !== 'C'" class="reviewer-card">
         <div class="section-header">
           <h3 class="section-title">
             <span class="material-symbols-outlined">group</span>
             评分配置
           </h3>
-          <el-button type="primary" size="small" @click="openReviewerDialog">
-            <span class="material-symbols-outlined" style="font-size: 16px; margin-right: 4px;">settings</span>
-            配置
-          </el-button>
         </div>
         <div class="reviewer-info">
           <el-tag type="info">评分人数：{{ reviewProgress.reviewerCount || 0 }} 人</el-tag>
@@ -230,7 +232,10 @@
         <h3 class="section-title">
           <span class="material-symbols-outlined">people</span>
           已报名教师
-          <el-tag v-if="configuredReviewerIds.length > 0" type="info" size="small" style="margin-left: 12px;">
+          <el-tag v-if="activity.level === 'C'" type="info" size="small" style="margin-left: 12px;">
+            客观题考核
+          </el-tag>
+          <el-tag v-else-if="configuredReviewerIds.length > 0" type="info" size="small" style="margin-left: 12px;">
             配置评分员: {{ configuredReviewerIds.length }} 人
           </el-tag>
         </h3>
@@ -243,28 +248,42 @@
               {{ formatDateTime(row.enrolledAt) }}
             </template>
           </el-table-column>
-          <el-table-column label="各评分员打分" min-width="220">
+          <el-table-column :label="activity.level === 'C' ? '考试分数' : '各评分员打分'" min-width="220">
             <template #default="{ row }">
-              <div v-if="row.evaluations && row.evaluations.length > 0" class="eval-tags">
-                <el-tag v-for="ev in row.evaluations" :key="ev.id" size="small" type="info" style="margin: 2px;">
-                  {{ ev.evaluatorName }}: {{ ev.score }}
-                </el-tag>
-              </div>
-              <span v-else class="text-muted">-</span>
+              <template v-if="activity.level === 'C'">
+                <el-tag v-if="row.submissionStatus === 'submitted' && row.examScore !== undefined && row.examScore !== null" type="success">{{ row.examScore }} 分</el-tag>
+                <span v-else class="text-muted">未交卷</span>
+              </template>
+              <template v-else>
+                <div v-if="row.evaluations && row.evaluations.length > 0" class="eval-tags">
+                  <el-tag v-for="ev in row.evaluations" :key="ev.id" size="small" type="info" style="margin: 2px;">
+                    {{ ev.evaluatorName }}: {{ ev.score }}
+                  </el-tag>
+                </div>
+                <span v-else class="text-muted">-</span>
+              </template>
             </template>
           </el-table-column>
-          <el-table-column label="评分进度" width="120">
+          <el-table-column :label="activity.level === 'C' ? '考试结果' : '评分进度'" width="120">
             <template #default="{ row }">
-              <span v-if="configuredReviewerIds.length > 0">
-                {{ row.evaluations ? row.evaluations.length : 0 }} / {{ configuredReviewerIds.length }}
-              </span>
-              <span v-else class="text-muted">未配置</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="平均分" width="100">
-            <template #default="{ row }">
-              <el-tag v-if="row.averageScore !== undefined && row.averageScore !== null" type="success">{{ row.averageScore }}</el-tag>
-              <span v-else class="text-muted">-</span>
+              <template v-if="activity.level === 'C'">
+                <template v-if="activity.scoresPublished && row.submissionStatus === 'submitted'">
+                  <el-tag v-if="row.isPassed === true" type="success">通过</el-tag>
+                  <el-tag v-else-if="row.isPassed === false" type="danger">未通过</el-tag>
+                  <span v-else class="text-muted">-</span>
+                </template>
+                <template v-else>
+                  <el-tag v-if="row.submissionStatus === 'submitted'" type="success">已交卷</el-tag>
+                  <el-tag v-else-if="row.submissionStatus === 'in_progress'" type="warning">考试中</el-tag>
+                  <span v-else class="text-muted">未开始</span>
+                </template>
+              </template>
+              <template v-else>
+                <span v-if="configuredReviewerIds.length > 0">
+                  {{ row.evaluations ? row.evaluations.length : 0 }} / {{ configuredReviewerIds.length }}
+                </span>
+                <span v-else class="text-muted">未配置</span>
+              </template>
             </template>
           </el-table-column>
         </el-table>
@@ -373,6 +392,13 @@
         <el-form-item label="考核地点">
           <el-input v-model="editForm.location" placeholder="非必填" />
         </el-form-item>
+        <el-form-item label="考核员" v-if="editForm.level !== 'C'">
+          <el-checkbox-group v-model="editForm.selectedReviewers">
+            <el-checkbox v-for="e in evaluators" :key="e.id" :value="e.id">
+              {{ e.realName }} ({{ e.department }})
+            </el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
         <el-form-item label="说明">
           <el-input v-model="editForm.description" type="textarea" :rows="3" />
         </el-form-item>
@@ -383,29 +409,6 @@
       </template>
     </el-dialog>
 
-    <!-- 评分人配置对话框 -->
-    <el-dialog v-model="showReviewerDialog" title="评分人配置" width="500px">
-      <el-alert type="info" :closable="false" class="mb-3">
-        勾选评分人后，评分人数将自动同步为勾选的人数
-      </el-alert>
-      <el-form label-width="100px">
-        <el-form-item label="评分人数">
-          <el-input :value="reviewerForm.selectedReviewers.length" disabled />
-          <span style="margin-left: 10px; color: #999;">人（由勾选的评分人自动计算）</span>
-        </el-form-item>
-        <el-form-item label="选择评分人">
-          <el-checkbox-group v-model="reviewerForm.selectedReviewers">
-            <el-checkbox v-for="e in evaluators" :key="e.id" :value="e.id">
-              {{ e.realName }} ({{ e.department }})
-            </el-checkbox>
-          </el-checkbox-group>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showReviewerDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleReviewerSubmit">确定</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -413,7 +416,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getActivityById, getActivityEnrollments, updateActivity, updateReviewerConfig, getReviewProgress } from '@/api/activity'
+import { getActivityById, getActivityEnrollments, updateActivity, getReviewProgress } from '@/api/activity'
 import { publishEvaluationScores, getTeacherActivityEvaluations } from '@/api/evaluation'
 import { getEvaluators } from '@/api/user'
 import { getPapersByPeriod } from '@/api/exam'
@@ -433,6 +436,22 @@ const selectedPaperId = ref<number | null>(null)
 const selectedPaperInfo = computed(() => {
   if (!selectedPaperId.value) return null
   return papers.value.find(p => p.id === selectedPaperId.value)
+})
+
+const canPublish = computed(() => {
+  if (!activity.value || activity.value.scoresPublished === true) return false
+  if (activity.value.level === 'C') {
+    // C级：考试结束后即可发布
+    const now = new Date()
+    const examEnd = activity.value.examEnd ? new Date(activity.value.examEnd) : null
+    if (examEnd && !isNaN(examEnd.getTime())) {
+      return now >= examEnd
+    }
+    // 未设置考试时间时，根据 timeStatus 判断
+    return activity.value.timeStatus === 'ended'
+  }
+  // 非C级：评分完成即可发布
+  return reviewProgress.value.reviewStatus === '评分完成'
 })
 
 // 根据 reviewerIds 获取已选评分人名字
@@ -480,8 +499,8 @@ const editFormRef = ref()
 const editForm = ref({
   name: '',
   level: '' as Activity['level'],
-  status: '' as Activity['status'],
   maxParticipants: 0,
+  selectedReviewers: [] as number[],
   enrollmentStart: '',
   enrollmentEnd: '',
   examStart: '',
@@ -502,12 +521,20 @@ const editRules = {
   materialEnd: [{ required: true, message: '请选择材料上传截止时间', trigger: 'change' }]
 }
 
-// 评分人配置相关
-const showReviewerDialog = ref(false)
 const evaluators = ref<any[]>([])
-const reviewerForm = ref({
-  selectedReviewers: [] as number[]
-})
+
+const safeParseReviewerIds = (reviewerIds: string | null | undefined): number[] => {
+  if (!reviewerIds) return []
+  try {
+    const parsed = JSON.parse(reviewerIds)
+    if (Array.isArray(parsed)) {
+      return parsed.map((id: unknown) => Number(id)).filter((id: number) => !isNaN(id))
+    }
+  } catch {
+    // ignore
+  }
+  return []
+}
 
 // 评分进度相关
 const reviewProgress = ref<any>({
@@ -534,25 +561,38 @@ const loadReviewProgress = async () => {
 
 const handlePublishScores = async () => {
   if (!activity.value) return
-  await ElMessageBox.confirm('确定要公布这次考核中所有已打分的成绩吗？公布后教师可查看。', '提示', { type: 'warning' })
   try {
-    const res = await publishEvaluationScores(activity.value.id)
+    const { value } = await ElMessageBox.prompt('请设置本次考核的通过分数线（大于等于此分数视为通过）', '发布成绩', {
+      confirmButtonText: '确定发布',
+      cancelButtonText: '取消',
+      inputPattern: /^\d+(\.\d{1,2})?$/,
+      inputErrorMessage: '请输入有效的分数（如 60 或 60.5）',
+      inputValue: '60'
+    })
+    const passingScore = parseFloat(value)
+    if (isNaN(passingScore) || passingScore < 0 || passingScore > 100) {
+      ElMessage.error('分数线必须在 0-100 之间')
+      return
+    }
+    const res = await publishEvaluationScores(activity.value.id, passingScore)
     if (res.code === 200) {
       ElMessage.success('成绩已公布')
       loadData()
     }
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '发布失败')
+    if (e !== 'cancel') {
+      ElMessage.error(e.response?.data?.message || '发布失败')
+    }
   }
 }
 
-const getStatusText = (status: string) => {
+const getTimeStatusText = (timeStatus?: string) => {
   const map: Record<string, string> = {
-    active: '进行中',
-    draft: '草稿',
-    closed: '已结束'
+    not_started: '未开始',
+    in_progress: '进行中',
+    ended: '已结束'
   }
-  return map[status] || '未知'
+  return map[timeStatus || ''] || '-'
 }
 
 const formatDateTime = (dateStr: string | null | undefined) => {
@@ -637,8 +677,8 @@ const openEditDialog = () => {
   editForm.value = {
     name: activity.value.name,
     level: activity.value.level,
-    status: activity.value.status,
     maxParticipants: activity.value.maxParticipants || 0,
+    selectedReviewers: safeParseReviewerIds(activity.value.reviewerIds),
     enrollmentStart: activity.value.enrollmentStart,
     enrollmentEnd: activity.value.enrollmentEnd,
     examStart: activity.value.examStart || '',
@@ -667,7 +707,13 @@ const handleEditSubmit = async () => {
 
   editLoading.value = true
   try {
-    const res = await updateActivity(activity.value.id, editForm.value)
+    const isCLevel = editForm.value.level === 'C'
+    const payload = {
+      ...editForm.value,
+      reviewerIds: isCLevel ? '[]' : JSON.stringify(editForm.value.selectedReviewers),
+      reviewerCount: isCLevel ? 0 : editForm.value.selectedReviewers.length
+    }
+    const res = await updateActivity(activity.value.id, payload)
     if (res.code === 200) {
       ElMessage.success('保存成功')
       showEditDialog.value = false
@@ -679,39 +725,6 @@ const handleEditSubmit = async () => {
     ElMessage.error(e.response?.data?.message || '保存失败')
   } finally {
     editLoading.value = false
-  }
-}
-
-const openReviewerDialog = () => {
-  if (!activity.value) return
-  reviewerForm.value.selectedReviewers = activity.value.reviewerIds ? JSON.parse(activity.value.reviewerIds).map((id: number) => id) : []
-  showReviewerDialog.value = true
-}
-
-const handleReviewerSubmit = async () => {
-  if (!activity.value) return
-  try {
-    const reviewerCount = reviewerForm.value.selectedReviewers.length
-    const reviewerIds = JSON.stringify(reviewerForm.value.selectedReviewers)
-    await updateReviewerConfig(activity.value.id, reviewerCount, reviewerIds)
-    ElMessage.success('评分人配置已保存')
-    showReviewerDialog.value = false
-    loadData()
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '保存失败')
-  }
-}
-
-const handleToggleStatus = async (newStatus: Activity['status']) => {
-  if (!activity.value) return
-  try {
-    await updateActivity(activity.value.id, { status: newStatus })
-    ElMessage.success(newStatus === 'active' ? '活动已启用' : '活动已关闭')
-    loadData()
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '操作失败')
-    // 恢复原状态
-    activity.value.status = activity.value.status === 'active' ? 'closed' : 'active'
   }
 }
 
@@ -746,7 +759,7 @@ const loadMaterials = async () => {
   if (!activity.value?.id) return
   materialsLoading.value = true
   try {
-    const res = await getMaterialList({ periodId: activity.value.id, size: 100 })
+    const res = await getMaterialList({ activityId: activity.value.id, size: 100 })
     if (res.code === 200) {
       materials.value = res.data?.records || []
     }
@@ -928,9 +941,9 @@ onMounted(() => {
   font-weight: 600;
 }
 
-.activity-status.status-active { background: #dcfce7; color: #16a34a; }
-.activity-status.status-draft { background: #f1f5f9; color: #64748b; }
-.activity-status.status-closed { background: #fee2e2; color: #dc2626; }
+.activity-status.time-status-not_started { background: #f1f5f9; color: #64748b; }
+.activity-status.time-status-in_progress { background: #dbeafe; color: #2563eb; }
+.activity-status.time-status-ended { background: #fee2e2; color: #dc2626; }
 
 .activity-desc {
   color: #64748b;

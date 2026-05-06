@@ -1,4 +1,5 @@
 package com.school.teacherEval.service;
+import com.school.teacherEval.exception.BusinessException;
 
 import com.school.teacherEval.config.MinioConfig;
 import com.school.teacherEval.entity.Document;
@@ -66,7 +67,7 @@ public class DocumentService {
         Document doc = documentRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("文档不存在"));
         if (doc.getIsDeleted() == 1) {
-            throw new RuntimeException("文档已删除");
+            throw new BusinessException("文档已删除");
         }
         return doc;
     }
@@ -75,17 +76,17 @@ public class DocumentService {
     public Document uploadDocument(MultipartFile file, Long userId, Long activityId,
                                     String title, String description) throws Exception {
         if (!enrollmentService.isEnrolledByActivity(activityId, userId)) {
-            throw new RuntimeException("您尚未报名该活动，无法上传文档");
+            throw new BusinessException("您尚未报名该活动，无法上传文档");
         }
 
         // 文件大小校验
         if (file.getSize() > MAX_FILE_SIZE) {
-            throw new RuntimeException("文件大小超过限制（最大50MB）");
+            throw new BusinessException("文件大小超过限制（最大50MB）");
         }
 
         String originalFilename = file.getOriginalFilename();
         if (originalFilename == null || originalFilename.isBlank()) {
-            throw new RuntimeException("文件名不能为空");
+            throw new BusinessException("文件名不能为空");
         }
 
         // 获取并校验扩展名
@@ -95,7 +96,7 @@ public class DocumentService {
             extension = originalFilename.substring(lastDotIndex).toLowerCase();
         }
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            throw new RuntimeException("不支持的文件类型，仅允许: " + String.join(", ", ALLOWED_EXTENSIONS));
+            throw new BusinessException("不支持的文件类型，仅允许: " + String.join(", ", ALLOWED_EXTENSIONS));
         }
 
         // MIME 类型辅助校验（客户端可伪造，不能完全依赖）
@@ -145,7 +146,7 @@ public class DocumentService {
         Document document = getDocumentById(id);
         
         if (!document.getUserId().equals(userId)) {
-            throw new RuntimeException("无权限修改此文档");
+            throw new BusinessException("无权限修改此文档");
         }
         
         if (title != null) {
@@ -163,7 +164,7 @@ public class DocumentService {
         Document document = getDocumentById(id);
         
         if (!document.getUserId().equals(userId) && !role.equals("admin")) {
-            throw new RuntimeException("无权限删除此文档");
+            throw new BusinessException("无权限删除此文档");
         }
         
         document.setIsDeleted(1);

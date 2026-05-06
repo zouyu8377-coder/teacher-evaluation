@@ -37,5 +37,6 @@ public class EnrollmentInfoVO {
     private LocalDateTime documentCreatedAt;
     private Boolean scorePublished;
     private BigDecimal finalScore;
+    private Boolean isPassed;
     private String comment;
 }

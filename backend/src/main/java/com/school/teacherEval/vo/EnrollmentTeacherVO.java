@@ -18,4 +18,6 @@ public class EnrollmentTeacherVO {
     private Long examRecordId;
     private LocalDateTime submittedAt;
     private String submissionStatus;
+    private java.math.BigDecimal examScore;
+    private Boolean isPassed;
 }

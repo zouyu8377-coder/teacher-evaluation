@@ -2,33 +2,45 @@ package com.school.teacherEval.config;
 
 import com.school.teacherEval.entity.*;
 import com.school.teacherEval.repository.*;
+import com.school.teacherEval.service.TeacherLevelService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Configuration
 @RequiredArgsConstructor
 public class DataInitializer {
     
     private final PasswordEncoder passwordEncoder;
-    
+    private final TeacherLevelService teacherLevelService;
+
     @Bean
+    @Transactional
     public CommandLineRunner initData(
-            UserRepository userRepository, 
+            UserRepository userRepository,
             ActivityRepository activityRepository,
             ExamQuestionRepository questionRepository,
             ExamPaperRepository paperRepository,
             PaperQuestionRepository paperQuestionRepository,
-            EnrollmentRepository enrollmentRepository) {
+            EnrollmentRepository enrollmentRepository,
+            EvaluationRepository evaluationRepository,
+            TeacherLevelHistoryRepository historyRepository) {
         return args -> {
+            // 0. 数据迁移：为已有通过评分的教师回填 teacher_level
+            migrateTeacherLevels(userRepository, evaluationRepository, activityRepository, historyRepository);
+
+            // 1. 初始化用户
             // 1. 初始化用户
             if (userRepository.count() == 0) {
                 User admin = new User();
@@ -96,7 +108,6 @@ public class DataInitializer {
                 cActivity.setLevel(Activity.Level.C);
                 cActivity.setDescription("2024学年第一学期C级教师考核");
                 cActivity.setMaxParticipants(50);
-                cActivity.setStatus(Activity.Status.draft);
                 cActivity.setEnrollmentStart(LocalDateTime.now().minusDays(7));
                 cActivity.setEnrollmentEnd(LocalDateTime.now().plusDays(30));
                 cActivity.setStartDate(LocalDate.of(2024, 9, 1));
@@ -111,7 +122,6 @@ public class DataInitializer {
                 b2Activity.setLevel(Activity.Level.B2);
                 b2Activity.setDescription("2024学年第一学期B2级教师考核");
                 b2Activity.setMaxParticipants(30);
-                b2Activity.setStatus(Activity.Status.draft);
                 b2Activity.setEnrollmentStart(LocalDateTime.now().minusDays(7));
                 b2Activity.setEnrollmentEnd(LocalDateTime.now().plusDays(30));
                 b2Activity.setStartDate(LocalDate.of(2024, 9, 1));
@@ -209,7 +219,6 @@ public class DataInitializer {
                     cActivity.setExamPaperId(paper.getId());
                     cActivity.setHasExam(true);
                     cActivity.setExamDurationMinutes(60);
-                    cActivity.setStatus(Activity.Status.active); // 确保设置为进行中状态
                     cActivity.setStartDate(LocalDate.of(2024, 9, 1)); // 设置开始日期
                     cActivity.setEndDate(LocalDate.of(2025, 1, 31)); // 设置结束日期
                     cActivity.setReviewerIds("[1]"); // 设置评审员ID
@@ -290,5 +299,55 @@ public class DataInitializer {
             System.out.println("测试数据初始化完成！");
             System.out.println("========================================");
         };
+    }
+
+    private void migrateTeacherLevels(UserRepository userRepository,
+                                       EvaluationRepository evaluationRepository,
+                                       ActivityRepository activityRepository,
+                                       TeacherLevelHistoryRepository historyRepository) {
+        List<User> teachers = userRepository.findByRole(User.Role.teacher);
+        int migrated = 0;
+        for (User user : teachers) {
+            if (user.getTeacherLevel() != TeacherLevel.NONE) continue;
+
+            List<Evaluation> passedEvals = evaluationRepository.findByTeacherIdAndIsPublished(user.getId())
+                    .stream()
+                    .filter(e -> Boolean.TRUE.equals(e.getIsPassed()))
+                    .toList();
+
+            if (passedEvals.isEmpty()) continue;
+
+            Activity.Level highestLevel = null;
+            LocalDateTime latestPassedAt = null;
+            for (Evaluation eval : passedEvals) {
+                Activity activity = activityRepository.findById(eval.getActivityId()).orElse(null);
+                if (activity == null) continue;
+                if (highestLevel == null || activity.getLevel().getTier() > highestLevel.getTier()) {
+                    highestLevel = activity.getLevel();
+                    latestPassedAt = eval.getUpdatedAt();
+                }
+            }
+
+            if (highestLevel != null) {
+                TeacherLevel newLevel = TeacherLevel.fromActivityLevel(highestLevel);
+                user.setTeacherLevel(newLevel);
+                user.setLevelChangedAt(latestPassedAt != null ? latestPassedAt : LocalDateTime.now());
+                userRepository.save(user);
+
+                TeacherLevelHistory history = new TeacherLevelHistory();
+                history.setTeacherId(user.getId());
+                history.setOldLevel(TeacherLevel.NONE);
+                history.setNewLevel(newLevel);
+                history.setChangeType(TeacherLevelHistory.ChangeType.AUTO);
+                history.setChangedByUserId(null);
+                historyRepository.save(history);
+
+                migrated++;
+                System.out.println("数据迁移：教师 " + user.getRealName() + " 等级回填为 " + newLevel.getDisplayName());
+            }
+        }
+        if (migrated > 0) {
+            System.out.println("数据迁移完成，共回填 " + migrated + " 位教师的等级");
+        }
     }
 }

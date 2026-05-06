@@ -8,11 +8,11 @@
         </div>
       </template>
 
-      <!-- C级考核：显示考试信息 -->
+      <!-- C级考核：显示考试信息（无需人工评分）-->
       <div v-if="currentActivity?.level === 'C'" class="exam-info-section">
-        <el-alert type="info" :closable="false" class="mb-3">
+        <el-alert type="success" :closable="false" class="mb-3">
           <template #title>
-            <span>C级考核为考试形式，已自动计算客观分数。最终成绩以本页提交的评分为准（多评分人取平均分）。</span>
+            <span>C级考核为客观题考试，最终成绩以考试得分为准，无需人工评分。</span>
           </template>
         </el-alert>
 
@@ -58,45 +58,48 @@
         <span v-if="!document" class="text-muted">教师尚未上传文档</span>
       </div>
 
-      <el-divider />
+      <!-- C级考核无需评分表单 -->
+      <template v-if="currentActivity?.level !== 'C'">
+        <el-divider />
 
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
-        <el-form-item label="教师姓名">
-          <el-input :value="teacherName" disabled />
-        </el-form-item>
+        <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
+          <el-form-item label="教师姓名">
+            <el-input :value="teacherName" disabled />
+          </el-form-item>
 
-        <el-form-item label="考核活动" prop="activityId">
-          <el-select v-model="form.activityId" placeholder="请选择考核活动" @change="onActivityChange">
-            <el-option v-for="a in activities" :key="a.id" :label="`${a.name} (${a.level}级)`" :value="a.id" />
-          </el-select>
-        </el-form-item>
+          <el-form-item label="考核活动" prop="activityId">
+            <el-select v-model="form.activityId" placeholder="请选择考核活动" @change="onActivityChange">
+              <el-option v-for="a in activities" :key="a.id" :label="`${a.name} (${a.level}级)`" :value="a.id" />
+            </el-select>
+          </el-form-item>
 
-        <el-form-item label="评分" prop="score">
-          <el-input-number v-model="form.score" :min="0" :max="100" :precision="1" />
-          <span style="margin-left: 10px;">分 (0-100)</span>
-        </el-form-item>
+          <el-form-item label="评分" prop="score">
+            <el-input-number v-model="form.score" :min="0" :max="100" :precision="1" />
+            <span style="margin-left: 10px;">分 (0-100)</span>
+          </el-form-item>
 
-        <el-form-item label="评语" prop="comment">
-          <el-input v-model="form.comment" type="textarea" :rows="4" maxlength="2000" show-word-limit placeholder="请输入评语" />
-        </el-form-item>
+          <el-form-item label="评语" prop="comment">
+            <el-input v-model="form.comment" type="textarea" :rows="4" maxlength="2000" show-word-limit placeholder="请输入评语" />
+          </el-form-item>
 
-        <el-form-item>
-          <el-alert v-if="scoresPublished" type="warning" :closable="false" style="margin-bottom: 12px; width: 100%;">
-            该活动成绩已发布，不可再修改评分。
-          </el-alert>
-          <el-button type="primary" :loading="loading" @click="handleSubmit" :disabled="scoresPublished">提交评分</el-button>
-        </el-form-item>
-      </el-form>
+          <el-form-item>
+            <el-alert v-if="scoresPublished" type="warning" :closable="false" style="margin-bottom: 12px; width: 100%;">
+              该活动成绩已发布，不可再修改评分。
+            </el-alert>
+            <el-button type="primary" :loading="loading" @click="handleSubmit" :disabled="scoresPublished">提交评分</el-button>
+          </el-form-item>
+        </el-form>
 
-      <el-divider />
+        <el-divider />
 
-      <h3>历史评分</h3>
-      <el-table :data="historyData" stripe>
-        <el-table-column prop="activityName" label="活动" />
-        <el-table-column prop="score" label="评分" />
-        <el-table-column prop="comment" label="评语" show-overflow-tooltip />
-        <el-table-column prop="createdAt" label="评分时间" />
-      </el-table>
+        <h3>历史评分</h3>
+        <el-table :data="historyData" stripe>
+          <el-table-column prop="activityName" label="活动" />
+          <el-table-column prop="score" label="评分" />
+          <el-table-column prop="comment" label="评语" show-overflow-tooltip />
+          <el-table-column prop="createdAt" label="评分时间" />
+        </el-table>
+      </template>
     </el-card>
   </div>
 </template>

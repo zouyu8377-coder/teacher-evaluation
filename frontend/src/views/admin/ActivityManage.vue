@@ -9,11 +9,11 @@
       </template>
 
       <el-form inline>
-        <el-form-item label="报名状态">
-          <el-select v-model="enrollmentStatusFilter" placeholder="全部" clearable style="width: 150px;">
-            <el-option label="未开始报名" value="pending" />
-            <el-option label="报名中" value="active" />
-            <el-option label="报名已截止" value="ended" />
+        <el-form-item label="时间状态">
+          <el-select v-model="timeStatusFilter" placeholder="全部" clearable style="width: 150px;">
+            <el-option label="未开始" value="not_started" />
+            <el-option label="进行中" value="in_progress" />
+            <el-option label="已结束" value="ended" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -48,11 +48,15 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="reviewerCount" label="评分人数" width="80" />
-        <el-table-column prop="status" label="状态">
+        <el-table-column prop="reviewerCount" label="评分人数" width="90">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : row.status === 'closed' ? 'danger' : 'info'">
-              {{ row.status === 'active' ? '进行中' : row.status === 'closed' ? '已关闭' : '草稿' }}
+            {{ row.level === 'C' ? '客观题' : (row.reviewerCount || 0) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="时间状态" width="120">
+          <template #default="{ row }">
+            <el-tag :type="getTimeStatusType(row.timeStatus)">
+              {{ getTimeStatusText(row.timeStatus) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -65,9 +69,6 @@
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button type="success" link @click="goToDetail(row)">详情</el-button>
-              <el-button :type="row.status === 'active' ? 'warning' : 'success'" link @click="toggleStatus(row)">
-                {{ row.status === 'active' ? '关闭' : '启用' }}
-              </el-button>
               <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
             </div>
           </template>
@@ -118,9 +119,12 @@
           <el-input-number v-model="form.maxParticipants" :min="0" :max="10000" placeholder="0表示不限制" />
           <span style="margin-left: 10px; color: #999;">0表示不限制</span>
         </el-form-item>
-        <el-form-item label="评分人数" prop="reviewerCount">
-          <el-input :value="form.selectedReviewers?.length || 0" disabled />
-          <span style="margin-left: 10px; color: #999;">人在评分人配置中设置</span>
+        <el-form-item label="考核员" v-if="form.level !== 'C'">
+          <el-checkbox-group v-model="form.selectedReviewers">
+            <el-checkbox v-for="e in evaluators" :key="e.id" :value="e.id">
+              {{ e.realName }} ({{ e.department }})
+            </el-checkbox>
+          </el-checkbox-group>
         </el-form-item>
         <el-form-item label="说明">
           <el-input v-model="form.description" type="textarea" :rows="3" />
@@ -132,28 +136,6 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="reviewerDialogVisible" title="评分人配置" width="500px">
-      <el-alert type="info" :closable="false" class="mb-3">
-        勾选评分人后，评分人数将自动同步为勾选的人数
-      </el-alert>
-      <el-form label-width="100px">
-        <el-form-item label="评分人数">
-          <el-input :value="reviewerConfig.selectedReviewers.length" disabled />
-          <span style="margin-left: 10px; color: #999;">人（由勾选的评分人自动计算）</span>
-        </el-form-item>
-        <el-form-item label="选择评分人">
-          <el-checkbox-group v-model="reviewerConfig.selectedReviewers">
-            <el-checkbox v-for="e in evaluators" :key="e.id" :value="e.id">
-              {{ e.realName }} ({{ e.department }})
-            </el-checkbox>
-          </el-checkbox-group>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="reviewerDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSaveReviewerConfig">确定</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -163,24 +145,22 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
-import { getActivityList, createActivity, updateActivity, deleteActivity, getEnrollmentInfo, updateReviewerConfig } from '@/api/activity'
+import { getActivityList, createActivity, updateActivity, deleteActivity, getEnrollmentInfo } from '@/api/activity'
 import { getEvaluators } from '@/api/user'
 import type { Activity } from '@/api/types'
 
 const loading = ref(false)
 const dialogVisible = ref(false)
-const reviewerDialogVisible = ref(false)
 const formRef = ref()
 const editId = ref<number | null>(null)
-const currentActivityId = ref<number | null>(null)
-const enrollmentStatusFilter = ref<string>('')
+const timeStatusFilter = ref<string>('')
 
 const tableData = ref<any[]>([])
 const evaluators = ref<any[]>([])
 
 const filteredActivities = computed(() => {
-  if (!enrollmentStatusFilter.value) return tableData.value
-  return tableData.value.filter(a => a.enrollmentStatus === enrollmentStatusFilter.value)
+  if (!timeStatusFilter.value) return tableData.value
+  return tableData.value.filter(a => a.timeStatus === timeStatusFilter.value)
 })
 
 const form = reactive({
@@ -195,11 +175,6 @@ const form = reactive({
   examDurationMinutes: 60,
   examEnd: '',
   description: ''
-})
-
-const reviewerConfig = reactive({
-  reviewerCount: 0,
-  selectedReviewers: [] as number[]
 })
 
 const rules = {
@@ -222,6 +197,24 @@ const getLevelType = (level: string) => {
   return types[level] || 'info'
 }
 
+const getTimeStatusType = (timeStatus?: string) => {
+  const types: Record<string, string> = {
+    'not_started': 'info',
+    'in_progress': 'primary',
+    'ended': 'danger'
+  }
+  return types[timeStatus || ''] || 'info'
+}
+
+const getTimeStatusText = (timeStatus?: string) => {
+  const texts: Record<string, string> = {
+    'not_started': '未开始',
+    'in_progress': '进行中',
+    'ended': '已结束'
+  }
+  return texts[timeStatus || ''] || '-'
+}
+
 const formatDateTime = (datetime: string | null) => {
   if (!datetime) return '-'
   return datetime.slice(0, 16).replace('T', ' ')
@@ -233,21 +226,6 @@ const loadData = async () => {
     const res = await getActivityList()
     if (res.code === 200) {
       const activities = (res.data || []) as any[]
-      const now = new Date()
-
-      // 先计算本地状态，再并发请求报名详情
-      for (const activity of activities) {
-        const enrollmentStart = activity.enrollmentStart ? new Date(activity.enrollmentStart) : null
-        const enrollmentEnd = activity.enrollmentEnd ? new Date(activity.enrollmentEnd) : null
-
-        if (enrollmentStart && now < enrollmentStart) {
-          activity.enrollmentStatus = 'pending'
-        } else if (enrollmentEnd && now > enrollmentEnd) {
-          activity.enrollmentStatus = 'ended'
-        } else {
-          activity.enrollmentStatus = 'active'
-        }
-      }
 
       // 并发加载所有活动的报名详情
       await Promise.all(
@@ -291,6 +269,7 @@ const handleAdd = () => {
     level: '',
     maxParticipants: 0,
     reviewerCount: 2,
+    selectedReviewers: [] as number[],
     enrollmentStart: '',
     enrollmentEnd: '',
     examStart: '',
@@ -336,25 +315,6 @@ const handleEdit = (row: any) => {
   dialogVisible.value = true
 }
 
-const handleReviewerConfig = (row: any) => {
-  currentActivityId.value = row.id
-  reviewerConfig.reviewerCount = row.reviewerCount !== undefined && row.reviewerCount !== null ? row.reviewerCount : 2
-  reviewerConfig.selectedReviewers = safeParseReviewerIds(row.reviewerIds)
-  reviewerDialogVisible.value = true
-}
-
-const handleSaveReviewerConfig = async () => {
-  if (!currentActivityId.value) return
-
-  // 自动同步评分人数为勾选的评分员数量
-  const reviewerCount = reviewerConfig.selectedReviewers.length
-  const reviewerIds = JSON.stringify(reviewerConfig.selectedReviewers)
-  await updateReviewerConfig(currentActivityId.value, reviewerCount, reviewerIds)
-  ElMessage.success('评分人配置已保存')
-  reviewerDialogVisible.value = false
-  loadData()
-}
-
 const handleSubmit = async () => {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
@@ -372,13 +332,16 @@ const handleSubmit = async () => {
   loading.value = true
   try {
     let res
+    const isCLevel = form.level === 'C'
+    const payload = {
+      ...form,
+      reviewerIds: isCLevel ? '[]' : JSON.stringify(form.selectedReviewers),
+      reviewerCount: isCLevel ? 0 : form.selectedReviewers.length
+    }
     if (editId.value) {
-      res = await updateActivity(editId.value, form as Partial<Activity>)
+      res = await updateActivity(editId.value, payload as Partial<Activity>)
     } else {
-      res = await createActivity({
-        ...form,
-        status: 'draft'
-      } as Partial<Activity>)
+      res = await createActivity(payload as Partial<Activity>)
     }
     if (res.code === 200) {
       ElMessage.success('操作成功')
@@ -392,25 +355,20 @@ const handleSubmit = async () => {
   }
 }
 
-const toggleStatus = async (row: any) => {
-  const newStatus = row.status === 'active' ? 'closed' : 'active'
-  try {
-    await updateActivity(row.id, { status: newStatus })
-    ElMessage.success('状态已更新')
-    loadData()
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '操作失败')
-  }
-}
-
 const handleDelete = async (row: any) => {
-  await ElMessageBox.confirm('确定要删除该活动吗？', '提示', { type: 'warning' })
+  const enrolledCount = row.enrolledCount || 0
+  const message = enrolledCount > 0
+    ? `该活动已有 ${enrolledCount} 名教师报名，删除后将解除所有报名关系且无法恢复，是否继续？`
+    : '确定要删除该活动吗？'
   try {
+    await ElMessageBox.confirm(message, '提示', { type: 'warning' })
     await deleteActivity(row.id)
     ElMessage.success('删除成功')
     loadData()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '删除失败')
+    if (e !== 'cancel') {
+      ElMessage.error(e.response?.data?.message || '删除失败')
+    }
   }
 }
 

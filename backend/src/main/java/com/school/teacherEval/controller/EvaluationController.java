@@ -128,20 +128,15 @@ public class EvaluationController {
         log.info("提交评分请求: evaluator={}, teacherId={}, activityId={}, score={}",
                 currentUser.getId(), request.get("teacherId"), request.get("activityId"), request.get("score"));
 
-        try {
-            Long teacherId = Long.valueOf(request.get("teacherId").toString());
-            Long activityId = Long.valueOf(request.get("activityId").toString());
-            BigDecimal score = new BigDecimal(request.get("score").toString());
-            String comment = request.get("comment") != null ? request.get("comment").toString() : null;
+        Long teacherId = Long.valueOf(request.get("teacherId").toString());
+        Long activityId = Long.valueOf(request.get("activityId").toString());
+        BigDecimal score = new BigDecimal(request.get("score").toString());
+        String comment = request.get("comment") != null ? request.get("comment").toString() : null;
 
-            Evaluation evaluation = evaluationService.createOrUpdateEvaluation(
-                    currentUser.getId(), teacherId, activityId, score, comment);
+        Evaluation evaluation = evaluationService.createOrUpdateEvaluation(
+                currentUser.getId(), teacherId, activityId, score, comment);
 
-            return ApiResponse.success(evaluation);
-        } catch (Exception e) {
-            log.error("提交评分失败", e);
-            throw e;
-        }
+        return ApiResponse.success(evaluation);
     }
     
     @GetMapping("/{id}")
@@ -156,18 +151,25 @@ public class EvaluationController {
     @PreAuthorize("hasRole('admin')")
     public ApiResponse<Integer> publishScores(
             @RequestParam Long activityId,
-            @RequestParam(required = false) Long teacherId) {
-        int count = evaluationService.publishScores(activityId, teacherId);
+            @RequestParam(required = false) Long teacherId,
+            @RequestParam BigDecimal passingScore) {
+        int count = evaluationService.publishScores(activityId, teacherId, passingScore);
         return ApiResponse.success(count);
     }
 
+    private static final Long SYSTEM_EVALUATOR_ID = 1L;
+
     private EvaluationVO toVO(Evaluation eval) {
         String evaluatorName = "";
-        try {
-            User evaluator = userService.getUserById(eval.getEvaluatorId());
-            evaluatorName = evaluator.getRealName();
-        } catch (Exception e) {
-            // ignore
+        if (SYSTEM_EVALUATOR_ID.equals(eval.getEvaluatorId())) {
+            evaluatorName = "系统评分（客观题）";
+        } else {
+            try {
+                User evaluator = userService.getUserById(eval.getEvaluatorId());
+                evaluatorName = evaluator.getRealName();
+            } catch (Exception e) {
+                // ignore
+            }
         }
 
         String teacherName = "";
@@ -189,6 +191,7 @@ public class EvaluationController {
                 eval.getStatus() != null ? eval.getStatus().name() : null,
                 eval.getIsPublished(),
                 eval.getIsLocked(),
+                eval.getIsPassed(),
                 eval.getCreatedAt(),
                 evaluatorName,
                 teacherName

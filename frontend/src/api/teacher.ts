@@ -1,4 +1,5 @@
 import api from './index'
+import type { ApiResponse } from './types'
 
 export interface UserInfo {
   id: number
@@ -14,7 +15,6 @@ export interface LevelInfo {
   level: string
   levelName: string
   hasPassed: boolean
-  bestScore: number | null
   passedAt: string | null
   nextLevel: string
   canEnrollNext: boolean
@@ -73,5 +73,5 @@ export interface TeacherDashboard {
 }
 
 export const getTeacherDashboard = () => {
-  return api.get('/teacher/dashboard')
+  return api.get('/teacher/dashboard') as Promise<ApiResponse<TeacherDashboard>>
 }

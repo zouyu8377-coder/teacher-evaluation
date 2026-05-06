@@ -67,21 +67,13 @@ public class TeacherDashboardService {
     }
 
     /**
-     * 获取当前级别信息 - 基于已通过的最高级别
-     * 未通过C级时视为无级别
+     * 获取当前级别信息 - 基于持久化的 teacherLevel 字段
      */
     private TeacherDashboardDTO.LevelInfo getCurrentLevelInfo(Long teacherId) {
+        User user = userRepository.findById(teacherId).orElse(null);
         TeacherDashboardDTO.LevelInfo levelInfo = new TeacherDashboardDTO.LevelInfo();
 
-        // 查找教师已发布且及格的成绩
-        List<Evaluation> passedEvals = evaluationRepository
-                .findByTeacherIdAndIsPublished(teacherId)
-                .stream()
-                .filter(e -> e.getFinalScore() != null && e.getFinalScore().compareTo(new BigDecimal("60")) >= 0)
-                .collect(Collectors.toList());
-
-        if (passedEvals.isEmpty()) {
-            // 未通过任何考核，视为无级别
+        if (user == null || user.getTeacherLevel() == null || user.getTeacherLevel().getTier() < 0) {
             levelInfo.setLevel(null);
             levelInfo.setLevelName("无级别");
             levelInfo.setHasPassed(false);
@@ -90,41 +82,16 @@ public class TeacherDashboardService {
             return levelInfo;
         }
 
-        // 找出已通过的最高级别
-        Activity.Level highestLevel = null;
-        BigDecimal bestScore = BigDecimal.ZERO;
-        LocalDateTime passedAt = null;
-
-        for (Evaluation eval : passedEvals) {
-            Activity activity = activityRepository.findById(eval.getActivityId()).orElse(null);
-            if (activity == null) continue;
-
-            Activity.Level level = activity.getLevel();
-            if (highestLevel == null || level.getTier() > highestLevel.getTier()) {
-                highestLevel = level;
-                bestScore = eval.getFinalScore();
-                passedAt = eval.getUpdatedAt();
-            } else if (level.getTier() == highestLevel.getTier() &&
-                       eval.getFinalScore().compareTo(bestScore) > 0) {
-                bestScore = eval.getFinalScore();
-                passedAt = eval.getUpdatedAt();
-            }
-        }
-
-        if (highestLevel == null) {
-            highestLevel = Activity.Level.C;
-        }
-
-        levelInfo.setLevel(highestLevel.name());
-        levelInfo.setLevelName(highestLevel.getDisplayName());
+        com.school.teacherEval.entity.TeacherLevel teacherLevel = user.getTeacherLevel();
+        levelInfo.setLevel(teacherLevel.name());
+        levelInfo.setLevelName(teacherLevel.getDisplayName());
         levelInfo.setHasPassed(true);
-        levelInfo.setBestScore(bestScore);
-        levelInfo.setPassedAt(passedAt);
+        levelInfo.setPassedAt(user.getLevelChangedAt());
 
-        // 计算下一级（可能多个）
-        List<Activity.Level> nextLevels = Activity.Level.getNextLevels(highestLevel);
+        // 计算下一级
+        Activity.Level currentActivityLevel = Activity.Level.valueOf(teacherLevel.name());
+        List<Activity.Level> nextLevels = Activity.Level.getNextLevels(currentActivityLevel);
         if (!nextLevels.isEmpty()) {
-            // 返回可报考的下一级别名称（多个用逗号分隔）
             String nextLevelNames = nextLevels.stream()
                     .map(Activity.Level::name)
                     .collect(Collectors.joining(","));
@@ -132,7 +99,7 @@ public class TeacherDashboardService {
             levelInfo.setCanEnrollNext(true);
         } else {
             levelInfo.setNextLevel("A1");
-            levelInfo.setCanEnrollNext(false); // 已是最高级
+            levelInfo.setCanEnrollNext(false);
         }
 
         return levelInfo;
@@ -202,7 +169,7 @@ public class TeacherDashboardService {
                         Evaluation eval = evalOpt.get();
                         info.setScorePublished(true);
                         info.setFinalScore(eval.getFinalScore());
-                        info.setIsPassed(eval.getFinalScore() != null && eval.getFinalScore().compareTo(new BigDecimal("60")) >= 0);
+                        info.setIsPassed(Boolean.TRUE.equals(eval.getIsPassed()));
                     } else {
                         info.setScorePublished(false);
                         info.setFinalScore(null);
@@ -253,7 +220,7 @@ public class TeacherDashboardService {
             record.setLevel(activity.getLevel().name());
             record.setLevelName(activity.getLevel().getDisplayName());
             record.setFinalScore(eval.getFinalScore());
-            record.setIsPassed(eval.getFinalScore() != null && eval.getFinalScore().compareTo(new BigDecimal("60")) >= 0);
+            record.setIsPassed(Boolean.TRUE.equals(eval.getIsPassed()));
 
             // 找到报名时间
             Optional<PeriodEnrollment> enrollment = enrollments.stream()
@@ -322,8 +289,8 @@ public class TeacherDashboardService {
         }
 
         // 检查是否有可报名的活动
-        List<Activity> allActive = activityRepository.findByStatus(Activity.Status.active);
-        for (Activity activity : allActive) {
+        List<Activity> allActivities = activityRepository.findAll();
+        for (Activity activity : allActivities) {
             boolean alreadyEnrolled = enrollments.stream()
                     .anyMatch(e -> e.getActivityId().equals(activity.getId()) &&
                                    e.getStatus() == PeriodEnrollment.Status.enrolled);
@@ -369,7 +336,7 @@ public class TeacherDashboardService {
         List<Evaluation> passedEvals = evaluationRepository
                 .findByTeacherIdAndIsPublished(teacherId)
                 .stream()
-                .filter(e -> e.getFinalScore() != null && e.getFinalScore().compareTo(new BigDecimal("60")) >= 0)
+                .filter(e -> Boolean.TRUE.equals(e.getIsPassed()))
                 .collect(Collectors.toList());
 
         Activity.Level highestLevel = null;

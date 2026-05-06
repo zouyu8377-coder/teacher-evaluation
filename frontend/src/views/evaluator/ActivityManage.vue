@@ -94,7 +94,8 @@
                 <template v-else>
                   <el-button type="primary" link @click="viewDocuments(row)" v-if="row.submittedAt">查看文档</el-button>
                 </template>
-                <el-button type="success" link @click="goEvaluate(row)" v-if="!selectedActivity.scoresPublished">打分</el-button>
+                <el-button type="success" link @click="goEvaluate(row)" v-if="selectedActivity.level !== 'C' && !selectedActivity.scoresPublished">打分</el-button>
+                <el-tag v-else-if="selectedActivity.level === 'C'" type="info" size="small">客观题考核</el-tag>
                 <el-tag v-else type="info" size="small">成绩已发布</el-tag>
               </div>
             </template>
