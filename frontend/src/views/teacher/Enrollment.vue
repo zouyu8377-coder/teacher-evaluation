@@ -74,7 +74,7 @@
                     <el-button type="primary" @click.stop="goToExam(item)">开始考试</el-button>
                   </template>
                   <template v-else>
-                    <el-button type="info" disabled>未开放</el-button>
+                    <el-button type="info" disabled>{{ getExamWindowButtonText(item) }}</el-button>
                   </template>
                 </template>
               </div>
@@ -205,6 +205,9 @@ const getLevelType = (level: string) => {
 
 // 获取活动状态
 const getActivityStatus = (item: any) => {
+  if (item.businessStatus) {
+    return item.businessStatus
+  }
   // 已评分发布成绩
   if (item.scorePublished && item.finalScore !== undefined) {
     return 'completed'
@@ -229,6 +232,9 @@ const getActivityStatus = (item: any) => {
 
 // 获取状态文本
 const getStatusText = (item: any) => {
+  if (item.statusText) {
+    return item.statusText
+  }
   const status = getActivityStatus(item)
   const statusMap: Record<string, string> = {
     'completed': '已完成',
@@ -236,7 +242,19 @@ const getStatusText = (item: any) => {
     'exam-in-progress': '考试中',
     'pending-exam': '待考试',
     'pending-upload': '待上传',
-    'pending-score': '待评分'
+    'pending-score': '待评分',
+    'exam_open': '可参加考试',
+    'exam_pending': '考试尚未开始',
+    'exam_missed': '考试时间已结束',
+    'exam_window_closed': '考试时间已结束',
+    'exam_in_progress': '考试中',
+    'exam_submitted_wait_publish': '考试完成，等待成绩发布',
+    'material_open': '可上传材料',
+    'material_pending': '材料提交未开始',
+    'material_missed': '材料提交已结束',
+    'material_submitted_wait_review': '已上传，等待评分',
+    'published_passed': '已发布通过',
+    'published_failed': '已发布未通过'
   }
   return statusMap[status] || ''
 }
@@ -263,16 +281,39 @@ const getMaterialWindowText = (item: any) => {
   return `${formatDateTimeFull(item.materialStart)} ~ ${formatDateTimeFull(item.materialEnd)}`
 }
 
-const isExamWindowOpen = (item: any) => {
+const getExamWindowState = (item: any) => {
   const now = new Date()
   const start = item.examStart ? new Date(item.examStart) : null
   const end = item.examEnd ? new Date(item.examEnd) : null
-  if (start && now < start) return false
-  if (end && now > end) return false
-  return true
+  if (start && now < start) return 'pending'
+  if (end && now > end) return 'ended'
+  return 'open'
+}
+
+const getExamWindowButtonText = (item: any) => {
+  const state = getExamWindowState(item)
+  if (state === 'pending') return '考试尚未开始'
+  if (state === 'ended') return '考试时间已结束'
+  return '开始考试'
+}
+
+const isExamWindowOpen = (item: any) => {
+  if (item.availableActions?.includes('start_exam') || item.availableActions?.includes('continue_exam')) {
+    return true
+  }
+  if (item.availableActions && !item.availableActions.includes('start_exam') && !item.availableActions.includes('continue_exam')) {
+    return false
+  }
+  return getExamWindowState(item) === 'open'
 }
 
 const isMaterialWindowOpen = (item: any) => {
+  if (item.availableActions?.includes('upload_document')) {
+    return true
+  }
+  if (item.availableActions && !item.availableActions.includes('upload_document')) {
+    return false
+  }
   const now = new Date()
   const start = item.materialStart ? new Date(item.materialStart) : null
   const end = item.materialEnd ? new Date(item.materialEnd) : null
@@ -346,6 +387,10 @@ const goToUpload = (row: any) => {
 }
 
 const goToExam = (row: any) => {
+  if (!isExamWindowOpen(row)) {
+    ElMessage.warning(getExamWindowButtonText(row))
+    return
+  }
   router.push({ path: '/teacher/exam', query: { activityId: row.activityId } })
 }
 

@@ -4,6 +4,7 @@ import com.school.teacherEval.entity.*;
 import com.school.teacherEval.repository.*;
 import com.school.teacherEval.service.TeacherLevelService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,6 +21,7 @@ import java.util.stream.Collectors;
 
 @Configuration
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "app.seed-data.enabled", havingValue = "true")
 public class DataInitializer {
     
     private final PasswordEncoder passwordEncoder;

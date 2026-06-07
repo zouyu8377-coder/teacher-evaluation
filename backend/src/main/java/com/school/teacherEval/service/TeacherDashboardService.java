@@ -6,11 +6,14 @@ import com.school.teacherEval.entity.Evaluation;
 import com.school.teacherEval.entity.ExamRecord;
 import com.school.teacherEval.entity.PeriodEnrollment;
 import com.school.teacherEval.entity.User;
+import com.school.teacherEval.entity.Document;
 import com.school.teacherEval.repository.ActivityRepository;
+import com.school.teacherEval.repository.DocumentRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
 import com.school.teacherEval.repository.ExamRecordRepository;
 import com.school.teacherEval.repository.EnrollmentRepository;
 import com.school.teacherEval.repository.UserRepository;
+import com.school.teacherEval.vo.AssessmentStatusVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,6 +33,8 @@ public class TeacherDashboardService {
     private final EvaluationRepository evaluationRepository;
     private final ActivityRepository activityRepository;
     private final ExamRecordRepository examRecordRepository;
+    private final DocumentRepository documentRepository;
+    private final AssessmentStatusService assessmentStatusService;
 
     public TeacherDashboardDTO getDashboard(Long teacherId) {
         TeacherDashboardDTO dto = new TeacherDashboardDTO();
@@ -155,8 +160,6 @@ public class TeacherDashboardService {
                             info.setWrongCount(examRecord.getWrongCount());
                         } else {
                             info.setExamStatus("in_progress");
-                            info.setExamStartTime(examRecord.getStartedAt());
-                            info.setExamEndTime(examRecord.getUpdatedAt());
                             info.setExamRecordId(examRecord.getId());
                         }
                     }
@@ -175,6 +178,29 @@ public class TeacherDashboardService {
                         info.setFinalScore(null);
                         info.setIsPassed(null);
                     }
+
+                    Document latestDocument = documentRepository
+                            .findByUserIdAndActivityId(teacherId, activity.getId(),
+                                    org.springframework.data.domain.PageRequest.of(0, 1,
+                                            org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt")))
+                            .getContent()
+                            .stream()
+                            .findFirst()
+                            .orElse(null);
+                    ExamRecord latestRecord = info.getExamRecordId() != null
+                            ? examRecordRepository.findById(info.getExamRecordId()).orElse(null)
+                            : null;
+                    AssessmentStatusVO status = assessmentStatusService.evaluate(
+                            activity,
+                            e,
+                            latestRecord,
+                            latestDocument,
+                            info.getScorePublished(),
+                            info.getIsPassed()
+                    );
+                    info.setBusinessStatus(status.getBusinessStatus());
+                    info.setStatusText(status.getStatusText());
+                    info.setAvailableActions(status.getAvailableActions());
 
                     return info;
                 })

@@ -33,6 +33,8 @@ class EvaluationServiceTest {
     private ActivityService activityService;
     @Mock
     private EvaluationValidator evaluationValidator;
+    @Mock
+    private TeacherLevelService teacherLevelService;
 
     @InjectMocks
     private EvaluationService evaluationService;
@@ -171,11 +173,12 @@ class EvaluationServiceTest {
         assertTrue(eval1.getIsLocked());
         assertEquals(new BigDecimal("85.00"), eval1.getFinalScore());
         assertTrue(activeActivity.getScoresPublished());
-        verify(activityRepository).save(activeActivity);
+        verify(activityRepository, times(2)).save(activeActivity);
     }
 
     @Test
     void publishScores_shouldExcludeSystemEvaluator_whenCalculatingAverage() {
+        activeActivity.setReviewerCount(1);
         when(activityService.getById(1L)).thenReturn(activeActivity);
 
         Evaluation sysEval = new Evaluation();

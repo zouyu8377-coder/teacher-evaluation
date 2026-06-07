@@ -101,6 +101,7 @@ public class UserController {
     
     @GetMapping("/{id}")
     @Operation(summary = "获取用户详情")
+    @PreAuthorize("hasAnyRole('admin', 'evaluator')")
     public ApiResponse<UserVO> getUserById(@PathVariable Long id) {
         User user = userService.getUserById(id);
         return ApiResponse.success(toVO(user));

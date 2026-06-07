@@ -15,6 +15,8 @@ import com.school.teacherEval.service.UserService;
 import com.school.teacherEval.service.EvaluationService;
 import com.school.teacherEval.service.ExamRecordService;
 import com.school.teacherEval.service.DocumentService;
+import com.school.teacherEval.service.AssessmentStatusService;
+import com.school.teacherEval.vo.AssessmentStatusVO;
 import com.school.teacherEval.vo.EnrollmentInfoVO;
 import com.school.teacherEval.vo.EnrollmentTeacherVO;
 import com.school.teacherEval.vo.MyEnrollmentVO;
@@ -43,6 +45,7 @@ public class ActivityController {
     private final EvaluationService evaluationService;
     private final ExamRecordService examRecordService;
     private final DocumentService documentService;
+    private final AssessmentStatusService assessmentStatusService;
 
     private User getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -51,6 +54,7 @@ public class ActivityController {
     }
     
     @GetMapping(produces = "application/json;charset=UTF-8")
+    @PreAuthorize("hasAnyRole('admin', 'evaluator')")
     public ApiResponse<List<Activity>> getAll(@RequestParam(required = false) Boolean activeOnly) {
         if (Boolean.TRUE.equals(activeOnly)) {
             return ApiResponse.success(activityService.getAllActiveOrderByLevel());
@@ -59,6 +63,7 @@ public class ActivityController {
     }
     
     @GetMapping(value = "/level/{level}", produces = "application/json;charset=UTF-8")
+    @PreAuthorize("hasAnyRole('admin', 'evaluator')")
     public ApiResponse<List<Activity>> getByLevel(@PathVariable Activity.Level level) {
         return ApiResponse.success(activityService.getByLevel(level));
     }
@@ -69,11 +74,13 @@ public class ActivityController {
     }
     
     @GetMapping(value = "/available", produces = "application/json;charset=UTF-8")
+    @PreAuthorize("hasAnyRole('admin', 'evaluator')")
     public ApiResponse<List<Activity>> getAvailable() {
         return ApiResponse.success(activityService.getAvailableActivities());
     }
     
     @GetMapping(value = "/active", produces = "application/json;charset=UTF-8")
+    @PreAuthorize("hasAnyRole('admin', 'evaluator')")
     public ApiResponse<List<Activity>> getActive() {
         return ApiResponse.success(activityService.getAllActiveOrderByLevel());
     }
@@ -100,35 +107,48 @@ public class ActivityController {
                     .filter(ev -> Boolean.TRUE.equals(ev.getIsPublished()))
                     .findFirst();
 
-                return new MyEnrollmentVO(
-                    e.getId(),
-                    e.getActivityId(),
-                    e.getEnrolledAt(),
-                    activity.getName(),
-                    activity.getLevel() != null ? activity.getLevel().name() : null,
-                    activity.getHasExam(),
-                    activity.getStartDate(),
-                    activity.getEndDate(),
-                    activity.getExamStart(),
-                    activity.getExamEnd(),
-                    activity.getMaterialStart(),
-                    activity.getMaterialEnd(),
-                    examRecord != null ? examRecord.getId() : null,
-                    examRecord != null ? examRecord.getScore() : null,
-                    examRecord != null && examRecord.getStatus() != null ? examRecord.getStatus().name() : null,
-                    examRecord != null ? examRecord.getSubmittedAt() : null,
-                    docOpt.map(Document::getId).orElse(null),
+                AssessmentStatusVO status = assessmentStatusService.evaluate(
+                    activity,
+                    e,
+                    examRecord,
+                    docOpt.orElse(null),
                     publishedEval.isPresent(),
-                    publishedEval.map(Evaluation::getFinalScore).orElse(null),
-                    publishedEval.map(Evaluation::getIsPassed).orElse(null),
-                    publishedEval.map(Evaluation::getComment).orElse(null)
+                    publishedEval.map(Evaluation::getIsPassed).orElse(null)
                 );
+
+                MyEnrollmentVO vo = new MyEnrollmentVO();
+                vo.setId(e.getId());
+                vo.setActivityId(e.getActivityId());
+                vo.setEnrolledAt(e.getEnrolledAt());
+                vo.setActivityName(activity.getName());
+                vo.setLevel(activity.getLevel() != null ? activity.getLevel().name() : null);
+                vo.setHasExam(activity.getHasExam());
+                vo.setStartDate(activity.getStartDate());
+                vo.setEndDate(activity.getEndDate());
+                vo.setExamStart(activity.getExamStart());
+                vo.setExamEnd(activity.getExamEnd());
+                vo.setMaterialStart(activity.getMaterialStart());
+                vo.setMaterialEnd(activity.getMaterialEnd());
+                vo.setExamRecordId(examRecord != null ? examRecord.getId() : null);
+                vo.setExamScore(examRecord != null ? examRecord.getScore() : null);
+                vo.setExamStatus(examRecord != null && examRecord.getStatus() != null ? examRecord.getStatus().name() : null);
+                vo.setExamSubmittedAt(examRecord != null ? examRecord.getSubmittedAt() : null);
+                vo.setDocumentId(docOpt.map(Document::getId).orElse(null));
+                vo.setScorePublished(publishedEval.isPresent());
+                vo.setFinalScore(publishedEval.map(Evaluation::getFinalScore).orElse(null));
+                vo.setIsPassed(publishedEval.map(Evaluation::getIsPassed).orElse(null));
+                vo.setComment(publishedEval.map(Evaluation::getComment).orElse(null));
+                vo.setBusinessStatus(status.getBusinessStatus());
+                vo.setStatusText(status.getStatusText());
+                vo.setAvailableActions(status.getAvailableActions());
+                return vo;
             })
             .collect(java.util.stream.Collectors.toList());
         return ApiResponse.success(result);
     }
     
     @GetMapping(value = "/reviewer/{evaluatorId}", produces = "application/json;charset=UTF-8")
+    @PreAuthorize("hasAnyRole('admin', 'evaluator')")
     public ApiResponse<List<Activity>> getByReviewer(@PathVariable Long evaluatorId) {
         return ApiResponse.success(activityService.getByReviewerId(evaluatorId));
     }
@@ -294,6 +314,23 @@ public class ActivityController {
             } else {
                 vo.setScorePublished(false);
             }
+
+            AssessmentStatusVO status = assessmentStatusService.evaluate(
+                activity,
+                enrollment,
+                examRecord,
+                docOpt.orElse(null),
+                vo.getScorePublished(),
+                vo.getIsPassed()
+            );
+            vo.setBusinessStatus(status.getBusinessStatus());
+            vo.setStatusText(status.getStatusText());
+            vo.setAvailableActions(status.getAvailableActions());
+        } else {
+            AssessmentStatusVO status = assessmentStatusService.evaluate(activity, null, null, null, false, null);
+            vo.setBusinessStatus(status.getBusinessStatus());
+            vo.setStatusText(status.getStatusText());
+            vo.setAvailableActions(status.getAvailableActions());
         }
 
         return ApiResponse.success(vo);
@@ -307,6 +344,7 @@ public class ActivityController {
     }
 
     @GetMapping(value = "/{id}/enrollments", produces = "application/json;charset=UTF-8")
+    @PreAuthorize("hasAnyRole('admin', 'evaluator')")
     public ApiResponse<List<EnrollmentTeacherVO>> getEnrollments(@PathVariable Long id) {
         List<User> teachers = enrollmentService.getEnrolledTeachersByActivity(id);
         Activity activity = activityService.getById(id);

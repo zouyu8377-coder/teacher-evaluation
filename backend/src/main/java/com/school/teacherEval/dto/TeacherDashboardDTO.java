@@ -67,6 +67,9 @@ public class TeacherDashboardDTO {
         private Boolean isPassed;
         private Integer correctCount;
         private Integer wrongCount;
+        private String businessStatus;
+        private String statusText;
+        private List<String> availableActions;
     }
 
     @Data

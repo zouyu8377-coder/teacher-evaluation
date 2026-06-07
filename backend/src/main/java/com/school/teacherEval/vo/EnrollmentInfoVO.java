@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -39,4 +40,7 @@ public class EnrollmentInfoVO {
     private BigDecimal finalScore;
     private Boolean isPassed;
     private String comment;
+    private String businessStatus;
+    private String statusText;
+    private List<String> availableActions;
 }

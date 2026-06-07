@@ -36,6 +36,7 @@ public class ExamController {
     
     @GetMapping("/questions")
     @Operation(summary = "获取题库列表")
+    @PreAuthorize("hasRole('admin')")
     public ApiResponse<PageVO<ExamQuestion>> getQuestions(
             @RequestParam(required = false) ExamQuestion.QuestionType type,
             @RequestParam(defaultValue = "1") int page,
@@ -46,6 +47,7 @@ public class ExamController {
     
     @GetMapping("/questions/{id}")
     @Operation(summary = "获取题目详情")
+    @PreAuthorize("hasRole('admin')")
     public ApiResponse<ExamQuestion> getQuestion(@PathVariable Long id) {
         return ApiResponse.success(questionService.getById(id));
     }
@@ -142,6 +144,7 @@ public class ExamController {
     
     @GetMapping("/papers")
     @Operation(summary = "获取试卷列表")
+    @PreAuthorize("hasRole('admin')")
     public ApiResponse<PageVO<ExamPaper>> getPapers(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -151,12 +154,14 @@ public class ExamController {
     
     @GetMapping("/papers/{id}")
     @Operation(summary = "获取试卷详情")
+    @PreAuthorize("hasRole('admin')")
     public ApiResponse<ExamPaper> getPaper(@PathVariable Long id) {
         return ApiResponse.success(paperService.getById(id));
     }
     
     @GetMapping("/papers/{id}/questions")
     @Operation(summary = "获取试卷题目")
+    @PreAuthorize("hasRole('admin')")
     public ApiResponse<List<PaperQuestion>> getPaperQuestions(@PathVariable Long id) {
         return ApiResponse.success(paperService.getPaperQuestions(id));
     }

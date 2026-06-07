@@ -29,4 +29,6 @@ public interface ExamRecordRepository extends JpaRepository<ExamRecord, Long> {
     boolean existsByTeacherIdAndActivityIdAndStatus(Long teacherId, Long activityId, ExamRecord.Status status);
     
     long countByActivityIdAndStatus(Long activityId, ExamRecord.Status status);
+
+    long countByActivityId(Long activityId);
 }

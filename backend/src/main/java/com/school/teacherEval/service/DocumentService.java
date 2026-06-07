@@ -2,7 +2,9 @@ package com.school.teacherEval.service;
 import com.school.teacherEval.exception.BusinessException;
 
 import com.school.teacherEval.config.MinioConfig;
+import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Document;
+import com.school.teacherEval.repository.ActivityRepository;
 import com.school.teacherEval.repository.DocumentRepository;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -46,6 +49,7 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final MinioConfig minioConfig;
     private final EnrollmentService enrollmentService;
+    private final ActivityRepository activityRepository;
     
     public Page<Document> getDocuments(Long userId, Long activityId, int page, int size) {
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -77,6 +81,18 @@ public class DocumentService {
                                     String title, String description) throws Exception {
         if (!enrollmentService.isEnrolledByActivity(activityId, userId)) {
             throw new BusinessException("您尚未报名该活动，无法上传文档");
+        }
+        Activity activity = activityRepository.findById(activityId)
+                .orElseThrow(() -> new BusinessException("活动不存在"));
+        if (Boolean.TRUE.equals(activity.getHasExam())) {
+            throw new BusinessException("考试类活动无需上传文档");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (activity.getMaterialStart() != null && now.isBefore(activity.getMaterialStart())) {
+            throw new BusinessException("材料提交尚未开始");
+        }
+        if (activity.getMaterialEnd() != null && now.isAfter(activity.getMaterialEnd())) {
+            throw new BusinessException("材料提交已结束");
         }
 
         // 文件大小校验

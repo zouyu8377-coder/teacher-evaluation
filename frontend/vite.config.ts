@@ -22,5 +22,19 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  build: {
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('element-plus') || id.includes('@element-plus')) return 'element'
+            if (id.includes('vue') || id.includes('pinia')) return 'vue'
+            return 'vendor'
+          }
+        }
+      }
+    }
   }
 })

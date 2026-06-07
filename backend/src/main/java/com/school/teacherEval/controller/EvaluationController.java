@@ -81,6 +81,7 @@ public class EvaluationController {
 
     @GetMapping("/activity/{activityId}/teacher/{teacherId}")
     @Operation(summary = "获取某教师的所有评分")
+    @PreAuthorize("hasAnyRole('admin', 'evaluator')")
     public ApiResponse<EvaluationListVO> getTeacherActivityEvaluations(
             @PathVariable Long activityId,
             @PathVariable Long teacherId) {
@@ -99,6 +100,7 @@ public class EvaluationController {
 
     @GetMapping("/activity/{activityId}/summary")
     @Operation(summary = "获取活动评分汇总")
+    @PreAuthorize("hasAnyRole('admin', 'evaluator')")
     public ApiResponse<EvaluationSummaryVO> getActivitySummary(
             @PathVariable Long activityId,
             @RequestParam(required = false) Long teacherId) {
@@ -141,6 +143,7 @@ public class EvaluationController {
     
     @GetMapping("/{id}")
     @Operation(summary = "获取评分详情")
+    @PreAuthorize("hasAnyRole('admin', 'evaluator')")
     public ApiResponse<EvaluationVO> getEvaluation(@PathVariable Long id) {
         Evaluation evaluation = evaluationService.getEvaluationById(id);
         return ApiResponse.success(toVO(evaluation));

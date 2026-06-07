@@ -29,3 +29,7 @@ jwt:
 logging:
   level:
     com.school.teacherEval: DEBUG
+
+app:
+  seed-data:
+    enabled: true

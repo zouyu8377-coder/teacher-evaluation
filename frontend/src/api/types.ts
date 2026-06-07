@@ -72,6 +72,9 @@ export interface MyEnrollmentVO {
   finalScore: number | null
   isPassed: boolean | null
   comment: string | null
+  businessStatus?: string
+  statusText?: string
+  availableActions?: string[]
 }
 
 // 报名教师 VO（对应后端 EnrollmentTeacherVO）
@@ -115,6 +118,9 @@ export interface EnrollmentInfoVO {
   finalScore: number | null
   isPassed: boolean | null
   comment: string | null
+  businessStatus?: string
+  statusText?: string
+  availableActions?: string[]
 }
 
 // 评分人统计 VO（对应后端 ReviewerStatVO）

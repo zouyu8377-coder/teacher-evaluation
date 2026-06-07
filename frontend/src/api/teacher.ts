@@ -41,6 +41,9 @@ export interface EnrollmentInfo {
   isPassed?: boolean | null
   correctCount?: number | null
   wrongCount?: number | null
+  businessStatus?: string
+  statusText?: string
+  availableActions?: string[]
 }
 
 export interface HistoryRecord {

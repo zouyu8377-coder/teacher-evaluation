@@ -26,3 +26,7 @@ minio:
 jwt:
   secret: test-secret-key-for-jwt-signing-only-used-in-tests
   expiration: 86400000
+
+app:
+  seed-data:
+    enabled: true

@@ -29,4 +29,6 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     Page<Document> findAllActive(Pageable pageable);
     
     long countByUserId(Long userId);
+
+    long countByActivityIdAndIsDeleted(Long activityId, Integer isDeleted);
 }

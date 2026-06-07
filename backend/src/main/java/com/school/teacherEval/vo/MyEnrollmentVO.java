@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -32,4 +33,7 @@ public class MyEnrollmentVO {
     private java.math.BigDecimal finalScore;
     private Boolean isPassed;
     private String comment;
+    private String businessStatus;
+    private String statusText;
+    private List<String> availableActions;
 }

@@ -1,13 +1,11 @@
 package com.school.teacherEval.service;
 
 import com.school.teacherEval.entity.Activity;
-import com.school.teacherEval.entity.Evaluation;
 import com.school.teacherEval.entity.PeriodEnrollment;
 import com.school.teacherEval.entity.User;
 import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.ActivityRepository;
 import com.school.teacherEval.repository.EnrollmentRepository;
-import com.school.teacherEval.repository.EvaluationRepository;
 import com.school.teacherEval.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,7 +21,7 @@ public class EnrollmentService {
     private final EnrollmentRepository enrollmentRepository;
     private final ActivityRepository activityRepository;
     private final UserRepository userRepository;
-    private final EvaluationRepository evaluationRepository;
+    private final EnrollmentEligibilityService enrollmentEligibilityService;
     
     public boolean isEnrolledByActivity(Long activityId, Long teacherId) {
         return enrollmentRepository.existsByActivityIdAndTeacherIdAndStatus(
@@ -40,43 +38,7 @@ public class EnrollmentService {
     }
     
     private boolean canEnroll(Long teacherId, Activity activity) {
-        Activity.Level targetLevel = activity.getLevel();
-
-        // C级没有前置要求
-        if (targetLevel.getPrevLevels().isEmpty()) {
-            return true;
-        }
-
-        // 获取该教师所有已通过的活动级别
-        List<PeriodEnrollment> enrollments = enrollmentRepository.findByTeacherId(teacherId);
-
-        for (PeriodEnrollment enrollment : enrollments) {
-            if (enrollment.getStatus() != PeriodEnrollment.Status.enrolled) {
-                continue;
-            }
-
-            Activity prevActivity = activityRepository.findById(enrollment.getActivityId()).orElse(null);
-            if (prevActivity == null) {
-                continue;
-            }
-
-            Activity.Level passedLevel = prevActivity.getLevel();
-
-            // 检查通过的级别是否是目标级别的前置级别之一
-            if (Activity.Level.canProgressTo(passedLevel, targetLevel)) {
-                // 需要确认该活动已发布成绩且通过
-                var evals = evaluationRepository.findByTeacherIdAndActivityId(teacherId, enrollment.getActivityId());
-                for (var eval : evals) {
-                    if (eval.getStatus() == Evaluation.Status.submitted &&
-                        Boolean.TRUE.equals(eval.getIsPublished()) &&
-                        Boolean.TRUE.equals(eval.getIsPassed())) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
+        return enrollmentEligibilityService.canEnroll(teacherId, activity);
     }
     
     @Transactional

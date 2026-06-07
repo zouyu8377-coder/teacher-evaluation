@@ -173,8 +173,8 @@
                 >
                   <div class="enrollment-header">
                     <span class="enrollment-name">{{ enrollment.activityName }}</span>
-                    <el-tag :type="getEnrollmentStatusType(enrollment.status)" size="small">
-                      {{ enrollment.status === 'enrolled' ? '已报名' : enrollment.status }}
+                    <el-tag :type="getEnrollmentStatusType(enrollment.businessStatus || enrollment.status)" size="small">
+                      {{ enrollment.statusText || (enrollment.status === 'enrolled' ? '已报名' : enrollment.status) }}
                     </el-tag>
                   </div>
                   <div class="enrollment-meta">
@@ -202,10 +202,15 @@
                     </template>
                     <!-- 考试进行中 -->
                     <template v-else-if="enrollment.examStatus === 'in_progress'">
-                      <el-button type="warning" size="small" @click="continueExam(enrollment)">
-                        继续考试
-                      </el-button>
-                      <span class="exam-hint">考试进行中</span>
+                      <template v-if="canDo(enrollment, 'continue_exam') || isInWindow(enrollment)">
+                        <el-button type="warning" size="small" @click="continueExam(enrollment)">
+                          继续考试
+                        </el-button>
+                        <span class="exam-hint">考试进行中</span>
+                      </template>
+                      <template v-else>
+                        <el-tag type="info" size="small">{{ enrollment.statusText || '考试时间已结束' }}</el-tag>
+                      </template>
                     </template>
                     <!-- 考试已完成（未评分或已评分） -->
                     <template v-else-if="enrollment.examStatus === 'completed'">
@@ -230,7 +235,7 @@
                   </div>
                   <!-- 非C级：文档上传入口 -->
                   <div v-else class="exam-status">
-                    <template v-if="isInWindow(enrollment)">
+                    <template v-if="canDo(enrollment, 'upload_document') || isInWindow(enrollment)">
                       <el-button type="primary" size="small" @click="goToUpload(enrollment)">
                         上传文档
                       </el-button>
@@ -320,6 +325,14 @@ const formatDateTime = (dateStr: string | null | undefined) => {
 
 // 检查当前时间是否在考试/上传窗口期内
 const isInWindow = (enrollment: EnrollmentInfo) => {
+  if (enrollment.availableActions?.includes('start_exam') ||
+      enrollment.availableActions?.includes('continue_exam') ||
+      enrollment.availableActions?.includes('upload_document')) {
+    return true
+  }
+  if (enrollment.availableActions && enrollment.availableActions.length === 0) {
+    return false
+  }
   const now = new Date()
   if (enrollment.level === 'C') {
     const start = enrollment.examStartTime ? new Date(enrollment.examStartTime) : null
@@ -334,6 +347,10 @@ const isInWindow = (enrollment: EnrollmentInfo) => {
     if (end && now > end) return false
     return true
   }
+}
+
+const canDo = (enrollment: EnrollmentInfo, action: string) => {
+  return enrollment.availableActions?.includes(action) ?? false
 }
 
 // 检查考试是否已结束
@@ -380,7 +397,14 @@ const handleTodoClick = (todo: TodoItem) => {
 const getEnrollmentStatusType = (status: string) => {
   const typeMap: Record<string, any> = {
     enrolled: 'success',
-    removed: 'info'
+    removed: 'info',
+    exam_open: 'warning',
+    exam_in_progress: 'warning',
+    exam_submitted_wait_publish: 'info',
+    material_open: 'primary',
+    material_submitted_wait_review: 'info',
+    published_passed: 'success',
+    published_failed: 'danger'
   }
   return typeMap[status] || 'info'
 }

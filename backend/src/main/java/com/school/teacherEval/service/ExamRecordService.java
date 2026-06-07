@@ -154,7 +154,7 @@ public class ExamRecordService {
         
         // 构建返回数据（脱敏：考试中不返回正确答案）
         List<Map<String, Object>> questions = new ArrayList<>();
-        boolean showAnswer = record.getStatus() == ExamRecord.Status.submitted;
+        boolean showAnswer = isScorePublished(record);
         
         for (PaperQuestion pq : pqs) {
             ExamQuestion q = pq.getQuestion();
@@ -415,15 +415,9 @@ public class ExamRecordService {
             .orElseThrow(() -> new RuntimeException("试卷不存在"));
 
         // 检查成绩是否已发布
-        List<Evaluation> evals = evaluationRepository.findByTeacherIdAndActivityId(
-            record.getTeacherId(), record.getActivityId());
-        boolean isPublished = evals.stream()
-            .anyMatch(e -> Boolean.TRUE.equals(e.getIsPublished()));
+        boolean isPublished = isScorePublished(record);
 
-        boolean isOwner = record.getTeacherId().equals(viewerId);
-        boolean showDetail = isPublished
-            || (isOwner && record.getStatus() == ExamRecord.Status.submitted)
-            || isEvaluatorOrAdmin;
+        boolean showDetail = isPublished || isEvaluatorOrAdmin;
 
         List<PaperQuestion> pqs = paperQuestionRepository.findByPaperIdOrderByQuestionOrder(paper.getId());
 
@@ -478,6 +472,12 @@ public class ExamRecordService {
         return result;
     }
     
+    private boolean isScorePublished(ExamRecord record) {
+        List<Evaluation> evals = evaluationRepository.findByTeacherIdAndActivityId(
+            record.getTeacherId(), record.getActivityId());
+        return evals.stream().anyMatch(e -> Boolean.TRUE.equals(e.getIsPublished()));
+    }
+
     private List<Map<String, String>> parseOptions(String optionsJson) {
         try {
             return objectMapper.readValue(optionsJson, new TypeReference<List<Map<String, String>>>() {});

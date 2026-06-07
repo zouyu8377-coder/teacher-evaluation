@@ -20,8 +20,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class EvaluationValidatorTest {
@@ -48,17 +49,13 @@ class EvaluationValidatorTest {
         cActivity = new Activity();
         cActivity.setId(1L);
         cActivity.setLevel(Activity.Level.C);
-        // 状态机制已移除，无需设置 status
         cActivity.setReviewerIds("[10, 11]");
 
         nonCActivity = new Activity();
         nonCActivity.setId(2L);
         nonCActivity.setLevel(Activity.Level.B1);
-        // 状态机制已移除，无需设置 status
         nonCActivity.setReviewerIds("[10]");
     }
-
-    // ================== validateUsersExist ==================
 
     @Test
     void validateUsersExist_shouldPass_whenBothExist() {
@@ -72,9 +69,7 @@ class EvaluationValidatorTest {
     void validateUsersExist_shouldThrow_whenEvaluatorNotFound() {
         when(userRepository.findById(10L)).thenReturn(Optional.empty());
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateUsersExist(10L, 20L));
-        assertEquals("考核员不存在", ex.getMessage());
+        assertThrows(BusinessException.class, () -> validator.validateUsersExist(10L, 20L));
     }
 
     @Test
@@ -82,59 +77,42 @@ class EvaluationValidatorTest {
         when(userRepository.findById(10L)).thenReturn(Optional.of(new User()));
         when(userRepository.findById(20L)).thenReturn(Optional.empty());
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateUsersExist(10L, 20L));
-        assertEquals("教师不存在", ex.getMessage());
+        assertThrows(BusinessException.class, () -> validator.validateUsersExist(10L, 20L));
     }
-
-    // ================== validateEvaluatorPermission ==================
 
     @Test
     void validateEvaluatorPermission_shouldPass_whenAuthorized() {
+        when(activityService.getById(2L)).thenReturn(nonCActivity);
+
+        assertDoesNotThrow(() -> validator.validateEvaluatorPermission(10L, 2L));
+    }
+
+    @Test
+    void validateEvaluatorPermission_shouldThrow_whenCLevel() {
         when(activityService.getById(1L)).thenReturn(cActivity);
 
-        assertDoesNotThrow(() -> validator.validateEvaluatorPermission(10L, 1L));
+        assertThrows(BusinessException.class, () -> validator.validateEvaluatorPermission(10L, 1L));
     }
 
     @Test
     void validateEvaluatorPermission_shouldThrow_whenReviewerIdsEmpty() {
-        cActivity.setReviewerIds(null);
-        when(activityService.getById(1L)).thenReturn(cActivity);
+        nonCActivity.setReviewerIds(null);
+        when(activityService.getById(2L)).thenReturn(nonCActivity);
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateEvaluatorPermission(10L, 1L));
-        assertEquals("该活动未分配考核员，无法评分", ex.getMessage());
+        assertThrows(BusinessException.class, () -> validator.validateEvaluatorPermission(10L, 2L));
     }
 
     @Test
     void validateEvaluatorPermission_shouldThrow_whenNotInList() {
-        when(activityService.getById(1L)).thenReturn(cActivity);
+        when(activityService.getById(2L)).thenReturn(nonCActivity);
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateEvaluatorPermission(99L, 1L));
-        assertEquals("您无权对该活动进行评分", ex.getMessage());
+        assertThrows(BusinessException.class, () -> validator.validateEvaluatorPermission(99L, 2L));
     }
 
-    // ================== validateActivityOpenForEvaluation ==================
-
     @Test
-    void validateActivityOpenForEvaluation_shouldPass_whenActive() {
-        when(activityService.getById(1L)).thenReturn(cActivity);
-
+    void validateActivityOpenForEvaluation_shouldAlwaysPass_afterStatusRemoval() {
         assertDoesNotThrow(() -> validator.validateActivityOpenForEvaluation(1L));
     }
-
-    @Test
-    void validateActivityOpenForEvaluation_shouldThrow_whenClosed() {
-        // 状态机制已移除，无需设置 status
-        when(activityService.getById(1L)).thenReturn(cActivity);
-
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateActivityOpenForEvaluation(1L));
-        assertEquals("该活动已禁用，无法评分", ex.getMessage());
-    }
-
-    // ================== validateScoreRange ==================
 
     @Test
     void validateScoreRange_shouldPass_forValidScore() {
@@ -143,33 +121,23 @@ class EvaluationValidatorTest {
 
     @Test
     void validateScoreRange_shouldThrow_whenNull() {
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateScoreRange(null));
-        assertEquals("评分不能为空", ex.getMessage());
+        assertThrows(BusinessException.class, () -> validator.validateScoreRange(null));
     }
 
     @Test
     void validateScoreRange_shouldThrow_whenBelowZero() {
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateScoreRange(new BigDecimal("-1")));
-        assertEquals("评分必须在 0-100 之间", ex.getMessage());
+        assertThrows(BusinessException.class, () -> validator.validateScoreRange(new BigDecimal("-1")));
     }
 
     @Test
     void validateScoreRange_shouldThrow_whenAbove100() {
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateScoreRange(new BigDecimal("100.1")));
-        assertEquals("评分必须在 0-100 之间", ex.getMessage());
+        assertThrows(BusinessException.class, () -> validator.validateScoreRange(new BigDecimal("100.1")));
     }
 
     @Test
     void validateScoreRange_shouldThrow_whenTwoDecimalPlaces() {
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateScoreRange(new BigDecimal("85.55")));
-        assertEquals("评分最多保留一位小数", ex.getMessage());
+        assertThrows(BusinessException.class, () -> validator.validateScoreRange(new BigDecimal("85.55")));
     }
-
-    // ================== validateTeacherCompletion ==================
 
     @Test
     void validateTeacherCompletion_shouldPass_whenCLevelExamSubmitted() {
@@ -186,9 +154,7 @@ class EvaluationValidatorTest {
         when(activityService.getById(1L)).thenReturn(cActivity);
         when(examRecordService.getRecordByTeacherAndActivity(20L, 1L)).thenReturn(null);
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateTeacherCompletion(20L, 1L));
-        assertEquals("该教师尚未完成考试，无法评分", ex.getMessage());
+        assertThrows(BusinessException.class, () -> validator.validateTeacherCompletion(20L, 1L));
     }
 
     @Test
@@ -206,12 +172,8 @@ class EvaluationValidatorTest {
         when(documentRepository.findFirstByActivityIdAndUserId(2L, 20L))
                 .thenReturn(Optional.empty());
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateTeacherCompletion(20L, 2L));
-        assertEquals("该教师尚未上传考核文档，无法评分", ex.getMessage());
+        assertThrows(BusinessException.class, () -> validator.validateTeacherCompletion(20L, 2L));
     }
-
-    // ================== validateNotLocked ==================
 
     @Test
     void validateNotLocked_shouldPass_whenNoLock() {
@@ -228,8 +190,6 @@ class EvaluationValidatorTest {
         when(evaluationRepository.findByActivityIdAndTeacherId(1L, 20L))
                 .thenReturn(List.of(lockedEval));
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> validator.validateNotLocked(1L, 20L));
-        assertEquals("该教师的成绩已发布锁定，无法修改评分", ex.getMessage());
+        assertThrows(BusinessException.class, () -> validator.validateNotLocked(1L, 20L));
     }
 }

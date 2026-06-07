@@ -237,9 +237,7 @@ const addSelectedQuestions = async () => {
 onMounted(async () => {
   await loadPaperInfo()
   await loadSelectedQuestions()
-  if (questionQuery.value.activityId) {
-    await loadQuestions()
-  }
+  await loadQuestions()
 })
 </script>
 

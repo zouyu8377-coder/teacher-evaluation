@@ -7,9 +7,9 @@ import java.time.LocalDateTime;
 @Data
 @Entity
 @Table(name = "period_enrollments", indexes = {
-    @Index(name = "idx_activity_id", columnList = "activity_id"),
-    @Index(name = "idx_teacher_id", columnList = "teacher_id"),
-    @Index(name = "idx_activity_teacher", columnList = "activity_id, teacher_id", unique = true)
+    @Index(name = "idx_period_enrollments_activity_id", columnList = "activity_id"),
+    @Index(name = "idx_period_enrollments_teacher_id", columnList = "teacher_id"),
+    @Index(name = "idx_period_enrollments_activity_teacher", columnList = "activity_id, teacher_id", unique = true)
 })
 public class PeriodEnrollment {
     

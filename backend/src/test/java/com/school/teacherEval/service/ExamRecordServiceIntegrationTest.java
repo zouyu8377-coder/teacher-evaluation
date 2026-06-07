@@ -248,7 +248,7 @@ class ExamRecordServiceIntegrationTest {
     }
 
     @Test
-    void getExamQuestions_shouldReturnCorrectAnswer_whenSubmitted() {
+    void getExamQuestions_shouldHideCorrectAnswer_untilPublished() {
         Long teacherId = 106L;
         ExamRecord record = examRecordService.startExam(testActivity.getId(), teacherId);
         examRecordService.saveAnswer(record.getId(), Map.of("1", "A", "2", "AC"), teacherId);
@@ -258,7 +258,7 @@ class ExamRecordServiceIntegrationTest {
 
         @SuppressWarnings("unchecked")
         java.util.List<Map<String, Object>> questions = (java.util.List<Map<String, Object>>) result.get("questions");
-        assertEquals("A", questions.get(0).get("correctAnswer"));
-        assertEquals("AC", questions.get(1).get("correctAnswer"));
+        assertNull(questions.get(0).get("correctAnswer"));
+        assertNull(questions.get(1).get("correctAnswer"));
     }
 }

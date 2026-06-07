@@ -7,8 +7,10 @@ import com.school.teacherEval.entity.Evaluation;
 import com.school.teacherEval.entity.PeriodEnrollment;
 import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.ActivityRepository;
+import com.school.teacherEval.repository.DocumentRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
 import com.school.teacherEval.repository.EnrollmentRepository;
+import com.school.teacherEval.repository.ExamRecordRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,7 +30,10 @@ public class ActivityService {
     private final ActivityRepository activityRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final EvaluationRepository evaluationRepository;
+    private final ExamRecordRepository examRecordRepository;
+    private final DocumentRepository documentRepository;
     private final ActivityValidator activityValidator;
+    private final EnrollmentEligibilityService enrollmentEligibilityService;
 
     public List<Activity> getAll() {
         return activityRepository.findAll();
@@ -110,6 +115,7 @@ public class ActivityService {
     @Transactional
     public void delete(Long id) {
         Activity activity = getById(id);
+        validateDelete(id);
 
         // 解除所有报名关系
         List<PeriodEnrollment> enrollments = enrollmentRepository.findByActivityId(id);
@@ -139,42 +145,7 @@ public class ActivityService {
     
     public boolean canEnroll(Long activityId, Long teacherId) {
         Activity activity = getById(activityId);
-        Activity.Level targetLevel = activity.getLevel();
-
-        // C级没有前置要求
-        if (targetLevel.getPrevLevels().isEmpty()) {
-            return true;
-        }
-
-        // 获取该教师所有已通过的活动级别
-        List<PeriodEnrollment> enrollments = enrollmentRepository.findByTeacherId(teacherId);
-        for (PeriodEnrollment enrollment : enrollments) {
-            if (enrollment.getStatus() != PeriodEnrollment.Status.enrolled) {
-                continue;
-            }
-
-            Activity prevActivity = activityRepository.findById(enrollment.getActivityId()).orElse(null);
-            if (prevActivity == null) {
-                continue;
-            }
-
-            Activity.Level passedLevel = prevActivity.getLevel();
-
-            // 检查通过的级别是否是目标级别的前置级别之一
-            if (Activity.Level.canProgressTo(passedLevel, targetLevel)) {
-                // 需要确认该活动已发布成绩且通过
-                List<Evaluation> evals = evaluationRepository.findByTeacherIdAndActivityId(teacherId, enrollment.getActivityId());
-                for (Evaluation eval : evals) {
-                    if (eval.getStatus() == Evaluation.Status.submitted &&
-                        Boolean.TRUE.equals(eval.getIsPublished()) &&
-                        Boolean.TRUE.equals(eval.getIsPassed())) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
+        return enrollmentEligibilityService.canEnroll(teacherId, activity);
     }
     
     public List<Activity> getAvailableForTeacher(Long teacherId) {
@@ -211,8 +182,16 @@ public class ActivityService {
 
         // 检查是否有评分记录
         long evalCount = evaluationRepository.countByActivityId(id);
+        long examRecordCount = examRecordRepository.countByActivityId(id);
+        long documentCount = documentRepository.countByActivityIdAndIsDeleted(id, 0);
         if (evalCount > 0) {
             throw new BusinessException("该活动已有评分记录，无法删除");
+        }
+        if (examRecordCount > 0) {
+            throw new BusinessException("该活动已有考试记录，无法删除");
+        }
+        if (documentCount > 0) {
+            throw new BusinessException("该活动已有提交材料，无法删除");
         }
 
         log.info("删除活动验证通过: {}, 名称: {}", id, activity.getName());

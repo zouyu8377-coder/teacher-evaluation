@@ -1,6 +1,6 @@
 # 教师评价考核平台
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/zouyu8377-coder/teacher-evaluation)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/zouyu8377-coder/teacher-evaluation)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 面向中小学教师职称/级别晋升的在线考核评价系统，支持在线考试、材料提交、多维度评分、等级自动晋升等功能。
@@ -175,6 +175,8 @@ teacher-evaluation/
 
 ## 测试账号
 
+以下账号仅在开发环境启用种子数据（`app.seed-data.enabled=true`）时自动创建，生产环境默认不会初始化这些账号。
+
 | 角色 | 用户名 | 密码 |
 |------|--------|------|
 | 管理员 | admin | admin123 |
@@ -186,9 +188,7 @@ teacher-evaluation/
 
 ## 部署
 
-生产服务器：`http://124.174.17.44`
-
-镜像仓库：`teacher-eval-cn-beijing.cr.volces.com`
+部署环境、镜像仓库和运维命令请以实际环境配置为准。
 
 详细部署说明见 [docs/部署配置.md](docs/部署配置.md)。
 
@@ -198,6 +198,7 @@ teacher-evaluation/
 
 | 版本 | 日期 | 主要变更 |
 |------|------|---------|
+| v1.4.0 | 2026-06-07 | 统一考核状态机，收紧权限边界，生产初始化治理，前端类型检查与依赖安全更新 |
 | v1.3.0 | 2026-05-06 | 引入教师等级体系：持久化等级、自动晋升、历史记录、管理端等级修改 |
 | v1.2.x | 2026-05 | 考核功能完善、成绩发布优化、C级考试修复 |
 | v1.1.7 | 2026-04 | 前后端类型安全重构 |

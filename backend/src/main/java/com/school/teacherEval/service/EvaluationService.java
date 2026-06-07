@@ -203,19 +203,23 @@ public class EvaluationService {
         int count = 0;
         for (Map.Entry<Long, List<Evaluation>> entry : byTeacher.entrySet()) {
             Long teacherId = entry.getKey();
-            List<Evaluation> teacherEvals = entry.getValue();
+            List<Evaluation> teacherEvals = entry.getValue().stream()
+                    .filter(e -> e.getScore() != null && e.getStatus() == Evaluation.Status.submitted)
+                    .toList();
+            int requiredReviewers = activity.getReviewerCount() != null ? activity.getReviewerCount() : 0;
+            if (requiredReviewers > 0 && teacherEvals.size() < requiredReviewers) {
+                throw new BusinessException("教师 " + teacherId + " 评分未完成，无法发布成绩");
+            }
             BigDecimal avgScore = calculateAverageScore(teacherEvals);
             boolean isPassed = avgScore != null && avgScore.compareTo(passingScore) >= 0;
 
             for (Evaluation eval : teacherEvals) {
-                if (eval.getScore() != null && eval.getStatus() == Evaluation.Status.submitted) {
-                    eval.setFinalScore(avgScore);
-                    eval.setIsPublished(true);
-                    eval.setIsLocked(true);
-                    eval.setIsPassed(isPassed);
-                    evaluationRepository.save(eval);
-                    count++;
-                }
+                eval.setFinalScore(avgScore);
+                eval.setIsPublished(true);
+                eval.setIsLocked(true);
+                eval.setIsPassed(isPassed);
+                evaluationRepository.save(eval);
+                count++;
             }
 
             if (isPassed) {

@@ -72,8 +72,8 @@
 
         <template v-if="!examRecord">
           <div class="action-prompt">
-            <p class="prompt-text">您需要参加在线考试来完成本次考核</p>
-            <el-button type="primary" size="large" @click="startExam">
+            <p class="prompt-text">{{ examWindowPrompt }}</p>
+            <el-button type="primary" size="large" :disabled="!canStartOrContinueExam" @click="startExam">
               <span class="material-symbols-outlined" style="font-size: 18px; margin-right: 8px;">play_arrow</span>
               开始考试
             </el-button>
@@ -82,8 +82,8 @@
 
         <template v-else-if="examRecord.status === 'in_progress'">
           <div class="action-prompt">
-            <p class="prompt-text">您有正在进行的考试</p>
-            <el-button type="warning" size="large" @click="continueExam">
+            <p class="prompt-text">{{ canStartOrContinueExam ? '您有正在进行的考试' : examWindowPrompt }}</p>
+            <el-button type="warning" size="large" :disabled="!canStartOrContinueExam" @click="continueExam">
               <span class="material-symbols-outlined" style="font-size: 18px; margin-right: 8px;">play_arrow</span>
               继续考试
             </el-button>
@@ -132,7 +132,7 @@
         <template v-if="!myDocument">
           <div class="action-prompt">
             <p class="prompt-text">请上传您的考核文档（支持 doc, docx, pdf, txt 格式）</p>
-            <el-button type="primary" size="large" @click="showUploadDialog = true">
+            <el-button type="primary" size="large" :disabled="!canUploadDocument" @click="showUploadDialog = true">
               <span class="material-symbols-outlined" style="font-size: 18px; margin-right: 8px;">upload</span>
               上传文档
             </el-button>
@@ -150,7 +150,7 @@
             </div>
             <div class="document-actions">
               <el-button type="primary" link @click="downloadDocument(myDocument)">下载</el-button>
-              <el-button type="warning" link @click="showUploadDialog = true">重新上传</el-button>
+              <el-button v-if="canUploadDocument" type="warning" link @click="showUploadDialog = true">重新上传</el-button>
             </div>
           </div>
           <div class="waiting-score">
@@ -302,6 +302,9 @@ const activityStatus = computed(() => {
 })
 
 const statusText = computed(() => {
+  if (enrollment.value?.statusText) {
+    return enrollment.value.statusText
+  }
   const map: Record<string, string> = {
     'completed': '已完成',
     'exam-completed': '待评分',
@@ -314,6 +317,37 @@ const statusText = computed(() => {
 
 const scorePublished = computed(() => {
   return enrollment.value?.scorePublished && enrollment.value?.finalScore !== undefined
+})
+
+const examWindowState = computed(() => {
+  const now = new Date()
+  const start = activity.value?.examStart ? new Date(activity.value.examStart) : null
+  const end = activity.value?.examEnd ? new Date(activity.value.examEnd) : null
+  if (start && now < start) return 'pending'
+  if (end && now > end) return 'ended'
+  return 'open'
+})
+
+const isExamWindowOpen = computed(() => examWindowState.value === 'open')
+const canStartOrContinueExam = computed(() => {
+  const actions = enrollment.value?.availableActions
+  if (actions) {
+    return actions.includes('start_exam') || actions.includes('continue_exam')
+  }
+  return isExamWindowOpen.value
+})
+const canUploadDocument = computed(() => {
+  const actions = enrollment.value?.availableActions
+  if (actions) {
+    return actions.includes('upload_document') || actions.includes('replace_document')
+  }
+  return true
+})
+
+const examWindowPrompt = computed(() => {
+  if (examWindowState.value === 'pending') return '考试尚未开始，请在考试时间内参加'
+  if (examWindowState.value === 'ended') return '考试时间已结束'
+  return '您需要参加在线考试来完成本次考核'
 })
 
 const formatDateTime = (datetime: string | null | undefined) => {
@@ -406,10 +440,18 @@ const loadMyDocument = async (activityId: number) => {
 }
 
 const startExam = () => {
+  if (!canStartOrContinueExam.value) {
+    ElMessage.warning(enrollment.value?.statusText || examWindowPrompt.value)
+    return
+  }
   router.push({ path: '/teacher/exam', query: { activityId: route.params.id } })
 }
 
 const continueExam = () => {
+  if (!canStartOrContinueExam.value) {
+    ElMessage.warning(enrollment.value?.statusText || examWindowPrompt.value)
+    return
+  }
   router.push({ path: '/teacher/exam', query: { activityId: route.params.id, recordId: examRecord.value.id } })
 }
 
