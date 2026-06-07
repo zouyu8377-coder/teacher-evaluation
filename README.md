@@ -4,7 +4,6 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 面向中小学教师职称/级别晋升的在线考核评价系统，支持在线考试、材料提交、多维度评分、等级自动晋升等功能。
-
 ---
 
 ## 平台预览
