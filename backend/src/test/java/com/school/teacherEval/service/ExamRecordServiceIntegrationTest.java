@@ -183,6 +183,40 @@ class ExamRecordServiceIntegrationTest {
     }
 
     @Test
+    void markMissingSubmissionAsZero_shouldSubmitZeroScore_whenInProgress() {
+        Long teacherId = 110L;
+        ExamRecord record = examRecordService.startExam(testActivity.getId(), teacherId);
+        examRecordService.saveAnswer(record.getId(), Map.of("1", "A"), teacherId);
+
+        record = examRecordService.markMissingSubmissionAsZero(testActivity, teacherId);
+
+        assertEquals(ExamRecord.Status.submitted, record.getStatus());
+        assertEquals(BigDecimal.ZERO, record.getAutoScore());
+        assertEquals(BigDecimal.ZERO, record.getScore());
+        assertEquals(0, record.getCorrectCount());
+        assertEquals(2, record.getWrongCount());
+        assertNotNull(record.getSubmittedAt());
+
+        var evals = evaluationRepository.findByTeacherIdAndActivityId(teacherId, testActivity.getId());
+        assertFalse(evals.isEmpty());
+        assertEquals(BigDecimal.ZERO, evals.get(0).getScore());
+        assertEquals(Evaluation.Status.submitted, evals.get(0).getStatus());
+    }
+
+    @Test
+    void markMissingSubmissionAsZero_shouldCreateZeroScoreRecord_whenNeverStarted() {
+        Long teacherId = 111L;
+
+        ExamRecord record = examRecordService.markMissingSubmissionAsZero(testActivity, teacherId);
+
+        assertNotNull(record.getId());
+        assertEquals(ExamRecord.Status.submitted, record.getStatus());
+        assertEquals(testPaper.getId(), record.getPaperId());
+        assertEquals(BigDecimal.ZERO, record.getScore());
+        assertEquals(2, record.getWrongCount());
+    }
+
+    @Test
     void startExam_shouldReturnExisting_whenInProgress() {
         Long teacherId = 102L;
         Long activityId = testActivity.getId();

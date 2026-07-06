@@ -183,7 +183,7 @@
                   </div>
                   <!-- 显示时间窗口 -->
                   <div class="time-window">
-                    <span class="time-label">{{ enrollment.level === 'C' ? '考试时间' : '上传窗口' }}：</span>
+                    <span class="time-label">{{ enrollment.level === 'C' ? '考试时间' : '活动时间' }}：</span>
                     <span class="time-value">{{ getWindowText(enrollment) }}</span>
                   </div>
 
@@ -235,13 +235,15 @@
                   </div>
                   <!-- 非C级：文档上传入口 -->
                   <div v-else class="exam-status">
-                    <template v-if="canDo(enrollment, 'upload_document') || isInWindow(enrollment)">
+                    <template v-if="canDo(enrollment, 'upload_document') || canDo(enrollment, 'replace_document')">
                       <el-button type="primary" size="small" @click="goToUpload(enrollment)">
-                        上传文档
+                        {{ canDo(enrollment, 'replace_document') ? '更新作品' : '提交作品' }}
                       </el-button>
                     </template>
                     <template v-else>
-                      <el-tag type="info" size="small">未开放</el-tag>
+                      <el-tag :type="getEnrollmentStatusType(enrollment.businessStatus || enrollment.status)" size="small">
+                        {{ enrollment.statusText || '等待处理' }}
+                      </el-tag>
                     </template>
                   </div>
                 </div>
@@ -337,6 +339,7 @@ const isInWindow = (enrollment: EnrollmentInfo) => {
   if (enrollment.level === 'C') {
     const start = enrollment.examStartTime ? new Date(enrollment.examStartTime) : null
     const end = enrollment.examEndTime ? new Date(enrollment.examEndTime) : null
+    if (!start || !end) return false
     if (start && now < start) return false
     if (end && now > end) return false
     return true

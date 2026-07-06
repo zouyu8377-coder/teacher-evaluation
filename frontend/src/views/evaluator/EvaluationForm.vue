@@ -113,7 +113,7 @@ import { submitEvaluation, getEvaluationList } from '@/api/evaluation'
 import { getActivityList, getActivityById } from '@/api/activity'
 import { getTeachers } from '@/api/user'
 import { getExamRecordsByActivity } from '@/api/exam'
-import { getTeacherDocuments } from '@/api/document'
+import { getTeacherDocuments, downloadDocument as downloadDocumentApi } from '@/api/document'
 
 const route = useRoute()
 const router = useRouter()
@@ -193,9 +193,20 @@ const viewDocument = () => {
   }
 }
 
-const downloadDocument = () => {
-  if (document.value?.fileUrl) {
-    window.open(document.value.fileUrl, '_blank')
+const downloadDocument = async () => {
+  if (!document.value?.id) return
+  try {
+    const res = await downloadDocumentApi(document.value.id)
+    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const link = window.document.createElement('a')
+    link.href = url
+    link.download = document.value.fileName || 'document'
+    window.document.body.appendChild(link)
+    link.click()
+    window.document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.message || '下载失败')
   }
 }
 

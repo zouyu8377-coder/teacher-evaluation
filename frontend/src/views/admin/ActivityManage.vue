@@ -29,9 +29,8 @@
         <el-table-column label="时间安排" width="200">
           <template #default="{ row }">
             <div class="time-cell">
-              <div>报名: {{ formatDateTime(row.enrollmentStart) }} ~ {{ formatDateTime(row.enrollmentEnd) }}</div>
+              <div>{{ row.level === 'C' ? '报名' : '活动' }}: {{ formatDateTime(row.enrollmentStart) }} ~ {{ formatDateTime(row.enrollmentEnd) }}</div>
               <div v-if="row.level === 'C'">考试: {{ formatDateTime(row.examStart) }} ~ {{ formatDateTime(row.examEnd) }}</div>
-              <div v-else>上传: {{ formatDateTime(row.materialStart) }} ~ {{ formatDateTime(row.materialEnd) }}</div>
             </div>
           </template>
         </el-table-column>
@@ -92,12 +91,12 @@
         </el-form-item>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="报名开始" prop="enrollmentStart">
+            <el-form-item :label="form.level === 'C' ? '报名开始' : '活动开始'" prop="enrollmentStart">
               <el-date-picker v-model="form.enrollmentStart" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="报名截止" prop="enrollmentEnd">
+            <el-form-item :label="form.level === 'C' ? '报名截止' : '活动截止'" prop="enrollmentEnd">
               <el-date-picker v-model="form.enrollmentEnd" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
             </el-form-item>
           </el-col>
@@ -335,6 +334,11 @@ const handleSubmit = async () => {
     const isCLevel = form.level === 'C'
     const payload = {
       ...form,
+      materialStart: isCLevel ? undefined : form.enrollmentStart,
+      materialEnd: isCLevel ? undefined : form.enrollmentEnd,
+      examStart: isCLevel ? form.examStart : undefined,
+      examDurationMinutes: isCLevel ? form.examDurationMinutes : undefined,
+      examEnd: undefined,
       reviewerIds: isCLevel ? '[]' : JSON.stringify(form.selectedReviewers),
       reviewerCount: isCLevel ? 0 : form.selectedReviewers.length
     }

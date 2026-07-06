@@ -12,7 +12,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -82,8 +81,7 @@ public class DocumentController {
     @Operation(summary = "获取文档详情")
     public ApiResponse<DocumentVO> getDocument(@PathVariable Long id) {
         User currentUser = getCurrentUser();
-        Document document = documentService.getDocumentById(id);
-        assertCanAccessDocument(currentUser, document);
+        Document document = documentService.getDocumentById(id, currentUser);
         return ApiResponse.success(toVO(document));
     }
     
@@ -118,14 +116,13 @@ public class DocumentController {
     @Operation(summary = "下载文档")
     public void downloadDocument(@PathVariable Long id, HttpServletResponse response) throws Exception {
         User currentUser = getCurrentUser();
-        Document document = documentService.getDocumentById(id);
-        assertCanAccessDocument(currentUser, document);
+        Document document = documentService.getDocumentById(id, currentUser);
         String fileName = document.getFileName();
         
         response.setContentType(document.getFileType());
         response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
         
-        InputStream inputStream = documentService.downloadDocument(id);
+        InputStream inputStream = documentService.downloadDocument(id, currentUser);
         OutputStream outputStream = response.getOutputStream();
         
         byte[] buffer = new byte[4096];
@@ -141,12 +138,6 @@ public class DocumentController {
     private User getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return userService.getCurrentUser(auth.getName());
-    }
-
-    private void assertCanAccessDocument(User currentUser, Document document) {
-        if (currentUser.getRole() == User.Role.teacher && !document.getUserId().equals(currentUser.getId())) {
-            throw new AccessDeniedException("无权限访问该文档");
-        }
     }
 
     private DocumentVO toVO(Document doc) {

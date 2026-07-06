@@ -76,6 +76,9 @@ public class AssessmentStatusService {
         if ("ended".equals(windowState)) {
             return new AssessmentStatusVO("exam_missed", "考试时间已结束", List.of());
         }
+        if ("not_configured".equals(windowState)) {
+            return new AssessmentStatusVO("exam_not_configured", "考试时间未设置", List.of());
+        }
         return new AssessmentStatusVO("exam_open", "可参加考试", List.of("start_exam"));
     }
 
@@ -85,23 +88,29 @@ public class AssessmentStatusService {
             List<String> actions = "open".equals(windowState)
                     ? List.of("view_document", "replace_document")
                     : List.of("view_document");
-            return new AssessmentStatusVO("material_submitted_wait_review", "已上传，等待评分", actions);
+            return new AssessmentStatusVO("material_submitted_wait_review", "作品已提交，等待评分", actions);
         }
 
         if ("pending".equals(windowState)) {
-            return new AssessmentStatusVO("material_pending", "材料提交未开始", List.of());
+            return new AssessmentStatusVO("material_pending", "活动尚未开始", List.of());
         }
         if ("ended".equals(windowState)) {
-            return new AssessmentStatusVO("material_missed", "材料提交已结束", List.of());
+            return new AssessmentStatusVO("material_missed", "活动已截止，未提交作品", List.of());
         }
-        return new AssessmentStatusVO("material_open", "可上传材料", List.of("upload_document"));
+        if ("not_configured".equals(windowState)) {
+            return new AssessmentStatusVO("material_not_configured", "活动时间未设置", List.of());
+        }
+        return new AssessmentStatusVO("material_open", "可提交作品", List.of("upload_document"));
     }
 
     private String getWindowState(LocalDateTime start, LocalDateTime end, LocalDateTime now) {
-        if (start != null && now.isBefore(start)) {
+        if (start == null || end == null) {
+            return "not_configured";
+        }
+        if (now.isBefore(start)) {
             return "pending";
         }
-        if (end != null && now.isAfter(end)) {
+        if (now.isAfter(end)) {
             return "ended";
         }
         return "open";

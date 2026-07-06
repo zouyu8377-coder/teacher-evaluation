@@ -173,12 +173,18 @@ public class ActivityController {
     }
     
     @GetMapping(value = "/{id}/review-progress", produces = "application/json;charset=UTF-8")
-    @PreAuthorize("hasRole('admin')")
+    @PreAuthorize("hasAnyRole('admin', 'evaluator')")
     public ApiResponse<ReviewProgressVO> getReviewProgress(@PathVariable Long id) {
         Activity activity = activityService.getById(id);
         List<User> enrolledTeachers = enrollmentService.getEnrolledTeachersByActivity(id);
         int totalTeachers = enrolledTeachers.size();
-        int totalRequired = totalTeachers * (activity.getReviewerCount() != null ? activity.getReviewerCount() : 0);
+        int submittedTeachers = totalTeachers;
+        if (activity.getLevel() != Activity.Level.C) {
+            submittedTeachers = (int) enrolledTeachers.stream()
+                .filter(teacher -> documentService.getLatestDocument(teacher.getId(), id).isPresent())
+                .count();
+        }
+        int totalRequired = submittedTeachers * (activity.getReviewerCount() != null ? activity.getReviewerCount() : 0);
 
         // 解析评分人ID列表
         List<Long> reviewerIdList = new ArrayList<>();
@@ -201,7 +207,7 @@ public class ActivityController {
                     reviewerId,
                     evaluator.getRealName(),
                     completedCount,
-                    totalTeachers
+                    activity.getLevel() == Activity.Level.C ? totalTeachers : submittedTeachers
                 ));
             }
         }

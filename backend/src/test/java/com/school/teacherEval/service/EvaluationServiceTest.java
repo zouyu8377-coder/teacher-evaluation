@@ -2,8 +2,12 @@ package com.school.teacherEval.service;
 
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Evaluation;
+import com.school.teacherEval.entity.PeriodEnrollment;
+import com.school.teacherEval.entity.Document;
 import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.ActivityRepository;
+import com.school.teacherEval.repository.DocumentRepository;
+import com.school.teacherEval.repository.EnrollmentRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +39,12 @@ class EvaluationServiceTest {
     private EvaluationValidator evaluationValidator;
     @Mock
     private TeacherLevelService teacherLevelService;
+    @Mock
+    private EnrollmentRepository enrollmentRepository;
+    @Mock
+    private ExamRecordService examRecordService;
+    @Mock
+    private DocumentRepository documentRepository;
 
     @InjectMocks
     private EvaluationService evaluationService;
@@ -129,12 +139,74 @@ class EvaluationServiceTest {
 
     @Test
     void publishScores_shouldThrow_whenExamNotEnded() {
+        activeActivity.setLevel(Activity.Level.C);
         activeActivity.setExamEnd(LocalDateTime.now().plusHours(1));
         when(activityService.getById(1L)).thenReturn(activeActivity);
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> evaluationService.publishScores(1L, null, new BigDecimal("60")));
         assertEquals("考试时间尚未结束，无法公布成绩", ex.getMessage());
+    }
+
+    @Test
+    void publishScores_shouldThrowForNonC_whenMaterialWindowNotEnded() {
+        activeActivity.setLevel(Activity.Level.B1);
+        activeActivity.setExamEnd(LocalDateTime.now().minusHours(1));
+        activeActivity.setMaterialEnd(LocalDateTime.now().plusHours(1));
+        when(activityService.getById(1L)).thenReturn(activeActivity);
+
+        assertThrows(BusinessException.class,
+                () -> evaluationService.publishScores(1L, null, new BigDecimal("60")));
+    }
+
+    @Test
+    void publishScores_shouldIgnoreExamEndForNonC() {
+        activeActivity.setLevel(Activity.Level.B1);
+        activeActivity.setExamEnd(LocalDateTime.now().plusHours(1));
+        activeActivity.setMaterialEnd(LocalDateTime.now().minusHours(1));
+        activeActivity.setReviewerCount(1);
+        when(activityService.getById(1L)).thenReturn(activeActivity);
+
+        Evaluation humanEval = new Evaluation();
+        humanEval.setEvaluatorId(10L);
+        humanEval.setTeacherId(100L);
+        humanEval.setScore(new BigDecimal("90"));
+        humanEval.setStatus(Evaluation.Status.submitted);
+        when(evaluationRepository.findByActivityId(1L)).thenReturn(List.of(humanEval));
+        stubSubmittedDocument(100L);
+
+        int count = evaluationService.publishScores(1L, null, new BigDecimal("60"));
+
+        assertEquals(1, count);
+        assertTrue(humanEval.getIsPublished());
+    }
+
+    @Test
+    void publishScores_shouldPublishZeroFailure_whenNonCTeacherMissingDocument() {
+        activeActivity.setLevel(Activity.Level.B1);
+        activeActivity.setMaterialEnd(LocalDateTime.now().minusHours(1));
+        activeActivity.setReviewerCount(1);
+        when(activityService.getById(1L)).thenReturn(activeActivity);
+
+        PeriodEnrollment enrollment = new PeriodEnrollment();
+        enrollment.setActivityId(1L);
+        enrollment.setTeacherId(100L);
+        enrollment.setStatus(PeriodEnrollment.Status.enrolled);
+        when(enrollmentRepository.findByActivityId(1L)).thenReturn(List.of(enrollment));
+        when(documentRepository.findFirstByActivityIdAndUserId(1L, 100L)).thenReturn(Optional.empty());
+        when(evaluationRepository.findByActivityId(1L)).thenReturn(List.of());
+        when(evaluationRepository.findByTeacherIdAndActivityIdAndEvaluatorId(100L, 1L, 1L))
+                .thenReturn(Optional.empty());
+
+        int count = evaluationService.publishScores(1L, null, new BigDecimal("60"));
+
+        assertEquals(1, count);
+        verify(evaluationRepository).save(argThat(eval ->
+                eval.getTeacherId().equals(100L)
+                        && BigDecimal.ZERO.compareTo(eval.getFinalScore()) == 0
+                        && Boolean.FALSE.equals(eval.getIsPassed())
+                        && Boolean.TRUE.equals(eval.getIsPublished())
+        ));
     }
 
     @Test
@@ -165,6 +237,7 @@ class EvaluationServiceTest {
 
         when(evaluationRepository.findByActivityId(1L))
                 .thenReturn(List.of(eval1, eval2));
+        stubSubmittedDocument(100L);
 
         int count = evaluationService.publishScores(1L, null, new BigDecimal("60"));
 
@@ -195,6 +268,7 @@ class EvaluationServiceTest {
 
         when(evaluationRepository.findByActivityId(1L))
                 .thenReturn(List.of(sysEval, humanEval));
+        stubSubmittedDocument(100L);
 
         int count = evaluationService.publishScores(1L, null, new BigDecimal("60"));
 
@@ -203,6 +277,33 @@ class EvaluationServiceTest {
         // 系统评分不应被修改
         assertNull(sysEval.getFinalScore());
         assertFalse(sysEval.getIsPublished());
+    }
+
+    @Test
+    void publishScores_shouldFinalizeMissingCLevelSubmissionsBeforePublish() {
+        activeActivity.setLevel(Activity.Level.C);
+        when(activityService.getById(1L)).thenReturn(activeActivity);
+
+        PeriodEnrollment enrollment = new PeriodEnrollment();
+        enrollment.setActivityId(1L);
+        enrollment.setTeacherId(100L);
+        enrollment.setStatus(PeriodEnrollment.Status.enrolled);
+        when(enrollmentRepository.findByActivityId(1L)).thenReturn(List.of(enrollment));
+
+        Evaluation sysEval = new Evaluation();
+        sysEval.setEvaluatorId(1L);
+        sysEval.setTeacherId(100L);
+        sysEval.setScore(BigDecimal.ZERO);
+        sysEval.setStatus(Evaluation.Status.submitted);
+        when(evaluationRepository.findByActivityId(1L)).thenReturn(List.of(sysEval));
+
+        int count = evaluationService.publishScores(1L, null, new BigDecimal("60"));
+
+        assertEquals(1, count);
+        assertEquals(BigDecimal.ZERO, sysEval.getFinalScore());
+        assertTrue(sysEval.getIsPublished());
+        assertFalse(sysEval.getIsPassed());
+        verify(examRecordService).markMissingSubmissionAsZero(activeActivity, 100L);
     }
 
     // ================== calculateAverageScore ==================
@@ -233,6 +334,16 @@ class EvaluationServiceTest {
 
         BigDecimal avg = evaluationService.calculateAverageScore(List.of(e1, e2));
         assertEquals(new BigDecimal("80.00"), avg);
+    }
+
+    private void stubSubmittedDocument(Long teacherId) {
+        PeriodEnrollment enrollment = new PeriodEnrollment();
+        enrollment.setActivityId(1L);
+        enrollment.setTeacherId(teacherId);
+        enrollment.setStatus(PeriodEnrollment.Status.enrolled);
+        when(enrollmentRepository.findByActivityId(1L)).thenReturn(List.of(enrollment));
+        when(documentRepository.findFirstByActivityIdAndUserId(1L, teacherId))
+                .thenReturn(Optional.of(new Document()));
     }
 
     // ================== getEvaluations ==================

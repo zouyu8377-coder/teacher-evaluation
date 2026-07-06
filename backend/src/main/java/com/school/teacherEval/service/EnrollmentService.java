@@ -51,10 +51,12 @@ public class EnrollmentService {
             .orElseThrow(() -> new BusinessException("活动不存在"));
 
         LocalDateTime now = LocalDateTime.now();
-        if (activity.getEnrollmentStart() != null && now.isBefore(activity.getEnrollmentStart())) {
+        LocalDateTime enrollStart = getEnrollmentWindowStart(activity);
+        LocalDateTime enrollEnd = getEnrollmentWindowEnd(activity);
+        if (enrollStart != null && now.isBefore(enrollStart)) {
             throw new BusinessException("报名尚未开始");
         }
-        if (activity.getEnrollmentEnd() != null && now.isAfter(activity.getEnrollmentEnd())) {
+        if (enrollEnd != null && now.isAfter(enrollEnd)) {
             throw new BusinessException("报名已结束");
         }
 
@@ -77,6 +79,20 @@ public class EnrollmentService {
         enrollment.setStatus(PeriodEnrollment.Status.enrolled);
 
         return enrollmentRepository.save(enrollment);
+    }
+
+    private LocalDateTime getEnrollmentWindowStart(Activity activity) {
+        if (activity.getLevel() != Activity.Level.C && activity.getMaterialStart() != null) {
+            return activity.getMaterialStart();
+        }
+        return activity.getEnrollmentStart();
+    }
+
+    private LocalDateTime getEnrollmentWindowEnd(Activity activity) {
+        if (activity.getLevel() != Activity.Level.C && activity.getMaterialEnd() != null) {
+            return activity.getMaterialEnd();
+        }
+        return activity.getEnrollmentEnd();
     }
     
     public List<PeriodEnrollment> getTeacherEnrollments(Long teacherId) {

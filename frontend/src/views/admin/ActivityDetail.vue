@@ -23,15 +23,14 @@
             <span class="activity-status" :class="'time-status-' + activity.timeStatus">
               {{ getTimeStatusText(activity.timeStatus) }}
             </span>
-            <template v-if="!activity.scoresPublished">
+            <template v-if="!activity.scoresPublished && canPublish">
               <el-button
-                :type="canPublish ? 'success' : 'info'"
-                :disabled="!canPublish"
+                type="success"
                 size="small"
                 @click="handlePublishScores"
                 style="margin-left: 12px;"
               >
-                {{ canPublish ? '发布成绩' : '暂不可发布' }}
+                发布成绩
               </el-button>
             </template>
             <template v-else>
@@ -101,16 +100,12 @@
         </div>
         <div class="time-list">
           <div class="time-item">
-            <span class="time-label">报名时间</span>
+            <span class="time-label">{{ activity.level === 'C' ? '报名时间' : '活动时间' }}</span>
             <span class="time-value">{{ formatDateTime(activity.enrollmentStart) }} ~ {{ formatDateTime(activity.enrollmentEnd) }}</span>
           </div>
           <div class="time-item" v-if="activity.level === 'C'">
             <span class="time-label">考试时间</span>
             <span class="time-value">{{ formatDateTime(activity.examStart) }} ~ {{ formatDateTime(activity.examEnd) }}</span>
-          </div>
-          <div class="time-item" v-else>
-            <span class="time-label">上传资料</span>
-            <span class="time-value">{{ formatDateTime(activity.materialStart) }} ~ {{ formatDateTime(activity.materialEnd) }}</span>
           </div>
           <div class="time-item" v-if="activity.location">
             <span class="time-label">考核地点</span>
@@ -157,7 +152,7 @@
             <el-tag v-else-if="reviewProgress.scoresPublished" type="success">成绩已发布</el-tag>
           </div>
           <!-- 评分完成且成绩未发布时显示发布按钮 -->
-          <div v-if="reviewProgress.reviewStatus === '评分完成' && !reviewProgress.scoresPublished" style="margin-top: 12px;">
+          <div v-if="!activity.scoresPublished && canPublish" style="margin-top: 12px;">
             <el-button type="primary" @click="handlePublishScores">发布成绩</el-button>
           </div>
         </div>
@@ -344,12 +339,12 @@
         </el-form-item>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="报名开始" prop="enrollmentStart">
+            <el-form-item :label="editForm.level === 'C' ? '报名开始' : '活动开始'" prop="enrollmentStart">
               <el-date-picker v-model="editForm.enrollmentStart" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="报名截止" prop="enrollmentEnd">
+            <el-form-item :label="editForm.level === 'C' ? '报名截止' : '活动截止'" prop="enrollmentEnd">
               <el-date-picker v-model="editForm.enrollmentEnd" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
             </el-form-item>
           </el-col>
@@ -366,21 +361,6 @@
               <el-form-item label="考试时长" prop="examDurationMinutes">
                 <el-input-number v-model="editForm.examDurationMinutes" :min="10" :max="480" />
                 <span style="margin-left: 10px;">分钟</span>
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </template>
-        <!-- 非C级：材料上传时间 -->
-        <template v-else>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="上传开始" prop="materialStart">
-                <el-date-picker v-model="editForm.materialStart" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="上传截止" prop="materialEnd">
-                <el-date-picker v-model="editForm.materialEnd" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
               </el-form-item>
             </el-col>
           </el-row>
@@ -450,7 +430,13 @@ const canPublish = computed(() => {
     // 未设置考试时间时，根据 timeStatus 判断
     return activity.value.timeStatus === 'ended'
   }
-  // 非C级：评分完成即可发布
+  const materialEnd = activity.value.materialEnd || activity.value.enrollmentEnd
+  if (materialEnd) {
+    const endTime = new Date(materialEnd)
+    if (!isNaN(endTime.getTime()) && new Date() < endTime) {
+      return false
+    }
+  }
   return reviewProgress.value.reviewStatus === '评分完成'
 })
 
@@ -710,6 +696,10 @@ const handleEditSubmit = async () => {
     const isCLevel = editForm.value.level === 'C'
     const payload = {
       ...editForm.value,
+      materialStart: isCLevel ? undefined : editForm.value.enrollmentStart,
+      materialEnd: isCLevel ? undefined : editForm.value.enrollmentEnd,
+      examStart: isCLevel ? editForm.value.examStart : undefined,
+      examDurationMinutes: isCLevel ? editForm.value.examDurationMinutes : undefined,
       reviewerIds: isCLevel ? '[]' : JSON.stringify(editForm.value.selectedReviewers),
       reviewerCount: isCLevel ? 0 : editForm.value.selectedReviewers.length
     }

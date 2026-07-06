@@ -30,6 +30,10 @@ spring:
 # 禁用MinIO配置
 minio:
   enabled: false
+  endpoint: http://localhost:19000
+  access-key: test-access-key
+  secret-key: test-secret-key
+  bucket-name: teacher-eval-test
   
 # JWT配置
 jwt:
@@ -45,4 +49,8 @@ logging:
     
 # 服务器配置
 server:
-  port: 8080
+  port: ${APP_BACKEND_PORT:18083}
+
+app:
+  seed-data:
+    enabled: true

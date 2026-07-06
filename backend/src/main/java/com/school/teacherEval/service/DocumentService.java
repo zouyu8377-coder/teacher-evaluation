@@ -4,6 +4,7 @@ import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.config.MinioConfig;
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Document;
+import com.school.teacherEval.entity.User;
 import com.school.teacherEval.repository.ActivityRepository;
 import com.school.teacherEval.repository.DocumentRepository;
 import io.minio.MinioClient;
@@ -16,6 +17,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -69,11 +71,17 @@ public class DocumentService {
     
     public Document getDocumentById(Long id) {
         Document doc = documentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("文档不存在"));
+                .orElseThrow(() -> new BusinessException(404, "文档不存在"));
         if (doc.getIsDeleted() == 1) {
             throw new BusinessException("文档已删除");
         }
         return doc;
+    }
+
+    public Document getDocumentById(Long id, User currentUser) {
+        Document document = getDocumentById(id);
+        assertCanAccessDocument(currentUser, document);
+        return document;
     }
     
     @Transactional
@@ -87,13 +95,7 @@ public class DocumentService {
         if (Boolean.TRUE.equals(activity.getHasExam())) {
             throw new BusinessException("考试类活动无需上传文档");
         }
-        LocalDateTime now = LocalDateTime.now();
-        if (activity.getMaterialStart() != null && now.isBefore(activity.getMaterialStart())) {
-            throw new BusinessException("材料提交尚未开始");
-        }
-        if (activity.getMaterialEnd() != null && now.isAfter(activity.getMaterialEnd())) {
-            throw new BusinessException("材料提交已结束");
-        }
+        assertMaterialMutationOpen(activity);
 
         // 文件大小校验
         if (file.getSize() > MAX_FILE_SIZE) {
@@ -164,6 +166,9 @@ public class DocumentService {
         if (!document.getUserId().equals(userId)) {
             throw new BusinessException("无权限修改此文档");
         }
+        Activity activity = activityRepository.findById(document.getActivityId())
+                .orElseThrow(() -> new BusinessException("活动不存在"));
+        assertMaterialMutationOpen(activity);
         
         if (title != null) {
             document.setTitle(title);
@@ -182,6 +187,11 @@ public class DocumentService {
         if (!document.getUserId().equals(userId) && !role.equals("admin")) {
             throw new BusinessException("无权限删除此文档");
         }
+        if (document.getUserId().equals(userId) && !role.equals("admin")) {
+            Activity activity = activityRepository.findById(document.getActivityId())
+                    .orElseThrow(() -> new BusinessException("活动不存在"));
+            assertMaterialMutationOpen(activity);
+        }
         
         document.setIsDeleted(1);
         documentRepository.save(document);
@@ -197,8 +207,8 @@ public class DocumentService {
         }
     }
     
-    public InputStream downloadDocument(Long id) throws Exception {
-        Document document = getDocumentById(id);
+    public InputStream downloadDocument(Long id, User currentUser) throws Exception {
+        Document document = getDocumentById(id, currentUser);
         
         return minioConfig.minioClient().getObject(GetObjectArgs.builder()
                 .bucket(minioConfig.getBucketName())
@@ -211,10 +221,37 @@ public class DocumentService {
         return document.getFileName();
     }
 
+    private void assertCanAccessDocument(User currentUser, Document document) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Access denied");
+        }
+        if (currentUser.getRole() == User.Role.teacher && !document.getUserId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("Access denied");
+        }
+    }
+
     public Optional<Document> getLatestDocument(Long userId, Long activityId) {
         return documentRepository.findByUserIdAndActivityId(userId, activityId, PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt")))
                 .getContent()
                 .stream()
                 .findFirst();
+    }
+
+    private void assertMaterialMutationOpen(Activity activity) {
+        if (activity == null) {
+            throw new BusinessException("活动不存在");
+        }
+        if (Boolean.TRUE.equals(activity.getHasExam()) || activity.getLevel() == Activity.Level.C) {
+            throw new BusinessException("考试类活动无需上传文档");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime start = activity.getMaterialStart() != null ? activity.getMaterialStart() : activity.getEnrollmentStart();
+        LocalDateTime end = activity.getMaterialEnd() != null ? activity.getMaterialEnd() : activity.getEnrollmentEnd();
+        if (start != null && now.isBefore(start)) {
+            throw new BusinessException("材料提交尚未开始");
+        }
+        if (end != null && now.isAfter(end)) {
+            throw new BusinessException("材料提交已结束");
+        }
     }
 }

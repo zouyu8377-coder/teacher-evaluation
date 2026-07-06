@@ -1,6 +1,7 @@
 package com.school.teacherEval.controller;
 
 import com.school.teacherEval.dto.ApiResponse;
+import com.school.teacherEval.dto.ChangePasswordDTO;
 import com.school.teacherEval.dto.LoginRequest;
 import com.school.teacherEval.dto.LoginResponse;
 import com.school.teacherEval.entity.User;
@@ -56,6 +57,14 @@ public class AuthController {
             user.getDepartment()
         );
         return ApiResponse.success(vo);
+    }
+
+    @PutMapping("/password")
+    @Operation(summary = "修改当前用户密码")
+    public ApiResponse<Void> changePassword(@RequestBody ChangePasswordDTO request) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        userService.changeOwnPassword(auth.getName(), request.getOldPassword(), request.getNewPassword());
+        return ApiResponse.success("密码修改成功", null);
     }
 
     @PostMapping("/logout")

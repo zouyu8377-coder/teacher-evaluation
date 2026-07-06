@@ -49,7 +49,12 @@ public class EvaluationController {
         User currentUser = userService.getCurrentUser(username);
 
         if (currentUser.getRole() == User.Role.teacher) {
-            teacherId = currentUser.getId();
+            List<Evaluation> evaluations = evaluationService.getTeacherPublishedEvaluations(currentUser.getId());
+            List<EvaluationVO> records = evaluations.stream()
+                    .map(this::toVO)
+                    .collect(Collectors.toList());
+            PageVO<EvaluationVO> data = new PageVO<>(records, records.size(), page, size);
+            return ApiResponse.success(data);
         }
 
         Page<Evaluation> evalPage = evaluationService.getEvaluations(activityId, teacherId, page, size);

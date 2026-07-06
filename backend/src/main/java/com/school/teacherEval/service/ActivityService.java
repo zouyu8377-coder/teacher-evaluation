@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Objects;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -53,6 +54,7 @@ public class ActivityService {
     
     @Transactional
     public Activity create(Activity activity) {
+        prepareActivityForLevel(activity);
         activityValidator.validateForSave(activity);
 
         // 默认评分人为0人
@@ -71,6 +73,8 @@ public class ActivityService {
     @Transactional
     public Activity update(Long id, Activity updated) {
         Activity activity = getById(id);
+
+        validateImmutableFieldsForStartedActivity(id, activity, updated);
         
         if (updated.getMaxParticipants() != null && !updated.getMaxParticipants().equals(activity.getMaxParticipants())) {
             validateCapacityUpdate(id, updated.getMaxParticipants());
@@ -96,6 +100,8 @@ public class ActivityService {
         if (updated.getStartDate() != null) activity.setStartDate(updated.getStartDate());
         if (updated.getEndDate() != null) activity.setEndDate(updated.getEndDate());
 
+        prepareActivityForLevel(activity);
+
         // 统一业务规则校验
         activityValidator.validateForSave(activity);
 
@@ -108,8 +114,80 @@ public class ActivityService {
         if (updated.getExamPaperId() != null) activity.setExamPaperId(updated.getExamPaperId());
         // 只有在创建时才设置hasExam，update时不自动修改
         if (updated.getExamDurationMinutes() != null) activity.setExamDurationMinutes(updated.getExamDurationMinutes());
+        prepareActivityForLevel(activity);
         // 保存时保持原有status，不自动更新
         return activityRepository.save(activity);
+    }
+
+    private void prepareActivityForLevel(Activity activity) {
+        if (activity == null || activity.getLevel() == null) {
+            return;
+        }
+        if (activity.getLevel() == Activity.Level.C) {
+            activity.setHasExam(true);
+            activity.setMaterialStart(null);
+            activity.setMaterialEnd(null);
+            return;
+        }
+        if (activity.getMaterialStart() == null) {
+            activity.setMaterialStart(activity.getEnrollmentStart());
+        }
+        if (activity.getMaterialEnd() == null) {
+            activity.setMaterialEnd(activity.getEnrollmentEnd());
+        }
+        if (activity.getMaterialStart() != null) {
+            activity.setEnrollmentStart(activity.getMaterialStart());
+        }
+        if (activity.getMaterialEnd() != null) {
+            activity.setEnrollmentEnd(activity.getMaterialEnd());
+        }
+        activity.setHasExam(false);
+        activity.setExamStart(null);
+        activity.setExamEnd(null);
+        activity.setExamPaperId(null);
+    }
+
+    private void validateImmutableFieldsForStartedActivity(Long id, Activity current, Activity updated) {
+        if (!hasStartedBusinessData(id)) {
+            return;
+        }
+
+        List<String> changedFields = new ArrayList<>();
+        if (updated.getLevel() != null && updated.getLevel() != current.getLevel()) {
+            changedFields.add("level");
+        }
+        if (updated.getEnrollmentStart() != null && !Objects.equals(updated.getEnrollmentStart(), current.getEnrollmentStart())) {
+            changedFields.add("enrollmentStart");
+        }
+        if (updated.getEnrollmentEnd() != null && !Objects.equals(updated.getEnrollmentEnd(), current.getEnrollmentEnd())) {
+            changedFields.add("enrollmentEnd");
+        }
+        if (updated.getExamStart() != null && !Objects.equals(updated.getExamStart(), current.getExamStart())) {
+            changedFields.add("examStart");
+        }
+        if (updated.getExamDurationMinutes() != null && !Objects.equals(updated.getExamDurationMinutes(), current.getExamDurationMinutes())) {
+            changedFields.add("examDurationMinutes");
+        }
+        if (updated.getMaterialStart() != null && !Objects.equals(updated.getMaterialStart(), current.getMaterialStart())) {
+            changedFields.add("materialStart");
+        }
+        if (updated.getMaterialEnd() != null && !Objects.equals(updated.getMaterialEnd(), current.getMaterialEnd())) {
+            changedFields.add("materialEnd");
+        }
+        if (updated.getExamPaperId() != null && !Objects.equals(updated.getExamPaperId(), current.getExamPaperId())) {
+            changedFields.add("examPaperId");
+        }
+
+        if (!changedFields.isEmpty()) {
+            throw new BusinessException("活动已产生报名、考试、材料或评分数据，不能修改关键配置: " + String.join(", ", changedFields));
+        }
+    }
+
+    private boolean hasStartedBusinessData(Long activityId) {
+        return enrollmentRepository.countByActivityIdAndStatus(activityId, PeriodEnrollment.Status.enrolled) > 0
+                || evaluationRepository.countByActivityId(activityId) > 0
+                || examRecordRepository.countByActivityId(activityId) > 0
+                || documentRepository.countByActivityIdAndIsDeleted(activityId, 0) > 0;
     }
     
     @Transactional
@@ -140,7 +218,9 @@ public class ActivityService {
     }
     
     public List<Activity> getByReviewerId(Long evaluatorId) {
-        return activityRepository.findByReviewerId(evaluatorId);
+        return activityRepository.findAll().stream()
+            .filter(activity -> parseReviewerIds(activity.getReviewerIds()).contains(evaluatorId))
+            .toList();
     }
     
     public boolean canEnroll(Long activityId, Long teacherId) {
@@ -199,5 +279,17 @@ public class ActivityService {
     
     public long getPassedCountByLevel(Activity.Level level) {
         return evaluationRepository.countPassedTeachersByLevel(level);
+    }
+
+    private List<Long> parseReviewerIds(String reviewerIds) {
+        if (reviewerIds == null || reviewerIds.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(reviewerIds, new TypeReference<List<Long>>() {});
+        } catch (Exception e) {
+            log.warn("Failed to parse reviewerIds for activity filtering: {}", reviewerIds, e);
+            return List.of();
+        }
     }
 }

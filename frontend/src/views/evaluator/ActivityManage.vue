@@ -94,7 +94,8 @@
                 <template v-else>
                   <el-button type="primary" link @click="viewDocuments(row)" v-if="row.submittedAt">查看文档</el-button>
                 </template>
-                <el-button type="success" link @click="goEvaluate(row)" v-if="selectedActivity.level !== 'C' && !selectedActivity.scoresPublished">打分</el-button>
+                <el-button type="success" link @click="goEvaluate(row)" v-if="selectedActivity.level !== 'C' && !selectedActivity.scoresPublished && row.submissionStatus === 'submitted'">打分</el-button>
+                <el-tag v-else-if="selectedActivity.level !== 'C' && !selectedActivity.scoresPublished && row.submissionStatus !== 'submitted'" type="info" size="small">未提交作品</el-tag>
                 <el-tag v-else-if="selectedActivity.level === 'C'" type="info" size="small">客观题考核</el-tag>
                 <el-tag v-else type="info" size="small">成绩已发布</el-tag>
               </div>
@@ -153,6 +154,38 @@
         </div>
       </div>
     </el-dialog>
+
+    <el-dialog
+      v-model="showDocumentDialog"
+      :title="documentDialogTitle"
+      width="760px"
+      :close-on-click-modal="false"
+    >
+      <el-table :data="teacherDocuments" stripe v-loading="documentLoading">
+        <el-table-column prop="title" label="材料名称" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="fileName" label="文件名" min-width="200" show-overflow-tooltip />
+        <el-table-column label="大小" width="100">
+          <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
+        </el-table-column>
+        <el-table-column label="上传时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="100" align="center">
+          <template #default="{ row }">
+            <el-button type="primary" link @click="handleDownload(row)">下载</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty
+        v-if="teacherDocuments.length === 0 && !documentLoading"
+        description="暂无上传材料"
+        :image-size="60"
+      />
+      <div v-if="selectedDocumentTeacher?.submissionComment" class="document-comment">
+        <div class="comment-title">提交说明</div>
+        <div>{{ selectedDocumentTeacher.submissionComment }}</div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -164,6 +197,7 @@ import { useUserStore } from '@/stores/user'
 import { getActiveActivities, getActivityEnrollments, getReviewProgress } from '@/api/activity'
 import { getExamRecordDetail } from '@/api/exam'
 import { getTeacherActivityEvaluations } from '@/api/evaluation'
+import { downloadDocument, getTeacherDocuments } from '@/api/document'
 
 const route = useRoute()
 const router = useRouter()
@@ -175,6 +209,10 @@ const enrolledTeachers = ref<any[]>([])
 const selectedActivity = ref<any>(null)
 const levelFilter = ref<string>('')
 const showExamDetail = ref(false)
+const showDocumentDialog = ref(false)
+const documentLoading = ref(false)
+const selectedDocumentTeacher = ref<any>(null)
+const teacherDocuments = ref<any[]>([])
 const examDetailRecord = ref<any>(null)
 const reviewStatus = ref<string>('')
 const examDetailQuestions = ref<any[]>([])
@@ -198,6 +236,18 @@ const getLevelType = (level: string) => {
 const formatDateTime = (datetime: string | null) => {
   if (!datetime) return '-'
   return datetime.slice(0, 19).replace('T', ' ')
+}
+
+const documentDialogTitle = computed(() => {
+  const teacherName = selectedDocumentTeacher.value?.realName || '教师'
+  return `${teacherName}的提交材料`
+})
+
+const formatFileSize = (size: number | null | undefined) => {
+  if (!size) return '-'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
 const loadActivities = async () => {
@@ -280,8 +330,33 @@ const selectActivity = async (activity: any) => {
   }
 }
 
-const viewDocuments = (row: any) => {
-  router.push(`/evaluator/documents/${row.id}?activityId=${selectedActivity.value.id}`)
+const viewDocuments = async (row: any) => {
+  if (!selectedActivity.value?.id) return
+  selectedDocumentTeacher.value = row
+  teacherDocuments.value = []
+  showDocumentDialog.value = true
+  documentLoading.value = true
+  try {
+    const res = await getTeacherDocuments(row.id, selectedActivity.value.id)
+    if (res.code === 200) {
+      teacherDocuments.value = res.data.records || []
+    } else {
+      ElMessage.error(res.message || '获取文档失败')
+    }
+  } finally {
+    documentLoading.value = false
+  }
+}
+
+const handleDownload = async (row: any) => {
+  const res = await downloadDocument(row.id)
+  const blob = new Blob([res.data])
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = row.fileName || '材料文件'
+  link.click()
+  window.URL.revokeObjectURL(url)
 }
 
 const viewExam = async (row: any) => {
@@ -397,5 +472,17 @@ onMounted(async () => {
   background: #fff;
   border-radius: 4px;
   color: #666;
+}
+.document-comment {
+  margin-top: 16px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  color: #606266;
+}
+.comment-title {
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: #303133;
 }
 </style>

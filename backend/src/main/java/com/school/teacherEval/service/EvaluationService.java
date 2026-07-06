@@ -4,8 +4,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Evaluation;
+import com.school.teacherEval.entity.PeriodEnrollment;
 import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.ActivityRepository;
+import com.school.teacherEval.repository.DocumentRepository;
+import com.school.teacherEval.repository.EnrollmentRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +37,9 @@ public class EvaluationService {
     private final ActivityService activityService;
     private final EvaluationValidator evaluationValidator;
     private final TeacherLevelService teacherLevelService;
+    private final EnrollmentRepository enrollmentRepository;
+    private final ExamRecordService examRecordService;
+    private final DocumentRepository documentRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -142,6 +148,10 @@ public class EvaluationService {
             cleanupExtraEvaluations(activityId, activity.getReviewerIds());
         }
 
+        if (activity.getLevel() == Activity.Level.C) {
+            finalizeMissingCLevelSubmissions(activity, teacherId);
+        }
+
         List<Evaluation> evaluations = teacherId != null
                 ? evaluationRepository.findByActivityIdAndTeacherId(activityId, teacherId)
                 : evaluationRepository.findByActivityId(activityId);
@@ -164,11 +174,16 @@ public class EvaluationService {
 
     private void validatePublishTiming(Activity activity) {
         LocalDateTime now = LocalDateTime.now();
-        if (activity.getExamEnd() != null && now.isBefore(activity.getExamEnd())) {
-            throw new BusinessException("考试时间尚未结束，无法公布成绩");
+        if (activity.getLevel() == Activity.Level.C) {
+            if (activity.getExamEnd() != null && now.isBefore(activity.getExamEnd())) {
+                throw new BusinessException("考试时间尚未结束，无法公布成绩");
+            }
+            return;
         }
-        if (activity.getExamEnd() == null && activity.getMaterialEnd() != null
-                && now.isBefore(activity.getMaterialEnd())) {
+        LocalDateTime materialEnd = activity.getMaterialEnd() != null
+                ? activity.getMaterialEnd()
+                : activity.getEnrollmentEnd();
+        if (materialEnd != null && now.isBefore(materialEnd)) {
             throw new BusinessException("材料提交时间尚未结束，无法公布成绩");
         }
     }
@@ -195,15 +210,38 @@ public class EvaluationService {
         }
     }
 
+    private void finalizeMissingCLevelSubmissions(Activity activity, Long targetTeacherId) {
+        List<PeriodEnrollment> enrollments = enrollmentRepository.findByActivityId(activity.getId());
+        for (PeriodEnrollment enrollment : enrollments) {
+            if (enrollment.getStatus() != PeriodEnrollment.Status.enrolled) {
+                continue;
+            }
+            if (targetTeacherId != null && !targetTeacherId.equals(enrollment.getTeacherId())) {
+                continue;
+            }
+            examRecordService.markMissingSubmissionAsZero(activity, enrollment.getTeacherId());
+        }
+    }
+
     private int applyFinalScores(Activity activity, List<Evaluation> evaluations, BigDecimal passingScore) {
         Map<Long, List<Evaluation>> byTeacher = evaluations.stream()
                 .filter(e -> !SYSTEM_EVALUATOR_ID.equals(e.getEvaluatorId()))
                 .collect(Collectors.groupingBy(Evaluation::getTeacherId));
 
         int count = 0;
-        for (Map.Entry<Long, List<Evaluation>> entry : byTeacher.entrySet()) {
-            Long teacherId = entry.getKey();
-            List<Evaluation> teacherEvals = entry.getValue().stream()
+        List<PeriodEnrollment> enrollments = enrollmentRepository.findByActivityId(activity.getId()).stream()
+                .filter(e -> e.getStatus() == PeriodEnrollment.Status.enrolled)
+                .toList();
+        for (PeriodEnrollment enrollment : enrollments) {
+            Long teacherId = enrollment.getTeacherId();
+            boolean hasDocument = documentRepository.findFirstByActivityIdAndUserId(activity.getId(), teacherId).isPresent();
+            if (!hasDocument) {
+                publishMissingDocumentAsFailed(activity, teacherId);
+                count++;
+                continue;
+            }
+
+            List<Evaluation> teacherEvals = byTeacher.getOrDefault(teacherId, List.of()).stream()
                     .filter(e -> e.getScore() != null && e.getStatus() == Evaluation.Status.submitted)
                     .toList();
             int requiredReviewers = activity.getReviewerCount() != null ? activity.getReviewerCount() : 0;
@@ -227,6 +265,23 @@ public class EvaluationService {
             }
         }
         return count;
+    }
+
+    private void publishMissingDocumentAsFailed(Activity activity, Long teacherId) {
+        Evaluation evaluation = evaluationRepository
+                .findByTeacherIdAndActivityIdAndEvaluatorId(teacherId, activity.getId(), SYSTEM_EVALUATOR_ID)
+                .orElse(new Evaluation());
+        evaluation.setActivityId(activity.getId());
+        evaluation.setEvaluatorId(SYSTEM_EVALUATOR_ID);
+        evaluation.setTeacherId(teacherId);
+        evaluation.setScore(BigDecimal.ZERO);
+        evaluation.setFinalScore(BigDecimal.ZERO);
+        evaluation.setStatus(Evaluation.Status.submitted);
+        evaluation.setIsPublished(true);
+        evaluation.setIsLocked(true);
+        evaluation.setIsPassed(false);
+        evaluation.setComment("未在活动截止前提交作品");
+        evaluationRepository.save(evaluation);
     }
 
     private int applyFinalScoresForCLevel(Activity activity, List<Evaluation> evaluations, BigDecimal passingScore) {

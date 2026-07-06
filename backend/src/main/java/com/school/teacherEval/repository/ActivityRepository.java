@@ -23,6 +23,4 @@ public interface ActivityRepository extends JpaRepository<Activity, Long> {
     @Query("SELECT a FROM Activity a ORDER BY CASE a.level WHEN 'C' THEN 1 WHEN 'B2' THEN 2 WHEN 'B1' THEN 3 WHEN 'A2' THEN 4 WHEN 'A1' THEN 5 END, a.startDate DESC")
     List<Activity> findAllOrderByLevel();
 
-    @Query("SELECT a FROM Activity a WHERE a.reviewerIds LIKE %:evaluatorId%")
-    List<Activity> findByReviewerId(@Param("evaluatorId") Long evaluatorId);
 }

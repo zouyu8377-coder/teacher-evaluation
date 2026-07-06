@@ -14,11 +14,12 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5174,
+    port: Number(process.env.APP_FRONTEND_PORT || 15188),
+    strictPort: true,
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8081',
+        target: process.env.APP_BACKEND_URL || 'http://localhost:18083',
         changeOrigin: true
       }
     }

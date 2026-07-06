@@ -19,11 +19,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class UserService {
+
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[A-Za-z0-9_.-]{3,50}$");
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -77,11 +80,12 @@ public class UserService {
     
     @Transactional
     public User createUser(UserCreateDTO dto) {
-        if (userRepository.existsByUsername(dto.getUsername())) {
+        String username = normalizeUsername(dto.getUsername());
+        if (userRepository.existsByUsername(username)) {
             throw new BusinessException("用户名已存在");
         }
         User user = new User();
-        user.setUsername(dto.getUsername());
+        user.setUsername(username);
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
         user.setRealName(dto.getRealName());
         user.setRole(dto.getRole());
@@ -89,6 +93,25 @@ public class UserService {
         user.setStatus(dto.getStatus() != null ? dto.getStatus() : 1);
         log.info("创建用户: {}, 角色: {}", user.getUsername(), user.getRole());
         return userRepository.save(user);
+    }
+
+    @Transactional
+    public void changeOwnPassword(String username, String oldPassword, String newPassword) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException("用户不存在"));
+
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new BusinessException("原密码不正确");
+        }
+        if (newPassword == null || newPassword.length() < 6 || newPassword.length() > 64) {
+            throw new BusinessException("新密码长度需为6-64位");
+        }
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+            throw new BusinessException("新密码不能与原密码相同");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
     }
 
     @Transactional
@@ -131,5 +154,13 @@ public class UserService {
     public User getUserById(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("用户不存在"));
+    }
+
+    private String normalizeUsername(String username) {
+        String normalized = username == null ? "" : username.trim();
+        if (!USERNAME_PATTERN.matcher(normalized).matches()) {
+            throw new BusinessException("用户名需为3-50位，仅支持字母、数字、下划线、短横线和点");
+        }
+        return normalized;
     }
 }

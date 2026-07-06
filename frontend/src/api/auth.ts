@@ -17,3 +17,7 @@ export const getCurrentUser = () => {
 export const logout = () => {
   return api.post('/auth/logout') as Promise<ApiResponse<void>>
 }
+
+export const changePassword = (oldPassword: string, newPassword: string) => {
+  return api.put('/auth/password', { oldPassword, newPassword }) as Promise<ApiResponse<void>>
+}

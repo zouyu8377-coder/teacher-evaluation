@@ -285,6 +285,7 @@ const getExamWindowState = (item: any) => {
   const now = new Date()
   const start = item.examStart ? new Date(item.examStart) : null
   const end = item.examEnd ? new Date(item.examEnd) : null
+  if (!start || !end) return 'not_configured'
   if (start && now < start) return 'pending'
   if (end && now > end) return 'ended'
   return 'open'
@@ -292,6 +293,7 @@ const getExamWindowState = (item: any) => {
 
 const getExamWindowButtonText = (item: any) => {
   const state = getExamWindowState(item)
+  if (state === 'not_configured') return '考试时间未设置'
   if (state === 'pending') return '考试尚未开始'
   if (state === 'ended') return '考试时间已结束'
   return '开始考试'

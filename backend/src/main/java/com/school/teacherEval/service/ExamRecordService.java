@@ -298,6 +298,40 @@ public class ExamRecordService {
         
         return record;
     }
+
+    @Transactional
+    public ExamRecord markMissingSubmissionAsZero(Activity activity, Long teacherId) {
+        if (activity == null || activity.getId() == null) {
+            throw new BusinessException("活动不存在");
+        }
+        if (activity.getExamPaperId() == null) {
+            throw new BusinessException("该活动没有关联试卷");
+        }
+
+        ExamRecord record = getRecordByTeacherAndActivity(teacherId, activity.getId());
+        if (record == null) {
+            record = new ExamRecord();
+            record.setActivityId(activity.getId());
+            record.setTeacherId(teacherId);
+            record.setPaperId(activity.getExamPaperId());
+            record.setStartedAt(activity.getExamStart());
+        }
+        if (record.getStatus() == ExamRecord.Status.submitted) {
+            return record;
+        }
+
+        record.setManualAdjust(BigDecimal.ZERO);
+        record.setAutoScore(BigDecimal.ZERO);
+        record.setScore(BigDecimal.ZERO);
+        record.setCorrectCount(0);
+        record.setWrongCount(paperQuestionRepository.findByPaperIdOrderByQuestionOrder(record.getPaperId()).size());
+        record.setSubmittedAt(LocalDateTime.now());
+        record.setStatus(ExamRecord.Status.submitted);
+
+        record = recordRepository.save(record);
+        syncToEvaluation(record);
+        return record;
+    }
     
     public ExamRecord autoGrade(ExamRecord record) {
         List<PaperQuestion> pqs = paperQuestionRepository.findByPaperIdOrderByQuestionOrder(record.getPaperId());

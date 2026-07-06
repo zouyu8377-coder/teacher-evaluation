@@ -5,42 +5,17 @@ echo ========================================
 echo 教师评价考核平台 - 后端启动脚本
 echo ========================================
 
+if "%APP_BACKEND_PORT%"=="" set APP_BACKEND_PORT=18083
+
 cd /d "%~dp0backend"
 
-echo [1/4] 停止可能运行的后端服务...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8080 " ^| findstr "LISTENING"') do (
-    echo 关闭端口 8080 (PID: %%a)
-    taskkill /F /PID %%a >nul 2>&1
-)
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8081 " ^| findstr "LISTENING"') do (
-    echo 关闭端口 8081 (PID: %%a)
-    taskkill /F /PID %%a >nul 2>&1
-)
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8082 " ^| findstr "LISTENING"') do (
-    echo 关闭端口 8082 (PID: %%a)
-    taskkill /F /PID %%a >nul 2>&1
-)
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8083 " ^| findstr "LISTENING"') do (
-    echo 关闭端口 8083 (PID: %%a)
-    taskkill /F /PID %%a >nul 2>&1
-)
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8084 " ^| findstr "LISTENING"') do (
-    echo 关闭端口 8084 (PID: %%a)
-    taskkill /F /PID %%a >nul 2>&1
-)
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8085 " ^| findstr "LISTENING"') do (
-    echo 关闭端口 8085 (PID: %%a)
-    taskkill /F /PID %%a >nul 2>&1
+netstat -ano | findstr ":%APP_BACKEND_PORT% " | findstr "LISTENING" >nul
+if not errorlevel 1 (
+    echo 端口 %APP_BACKEND_PORT% 已被占用，请设置 APP_BACKEND_PORT 后重试。
+    exit /b 1
 )
 
-echo 关闭所有 java.exe 进程...
-taskkill /F /IM java.exe >nul 2>&1
+echo 启动后端服务: http://localhost:%APP_BACKEND_PORT%
+mvn spring-boot:run -Dspring-boot.run.profiles=test
 
-echo [2/4] 清理旧日志...
-if exist "backend.log" del /F /Q "backend.log"
-
-echo [3/4] 启动后端服务...
-java -jar target\teacher-evaluation-1.0.0.jar --server.port=8083 --spring.datasource.url=jdbc:h2:mem:testdb --spring.datasource.driver-class-name=org.h2.Driver --spring.datasource.username=sa --spring.datasource.password= --spring.jpa.hibernate.ddl-auto=create --spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect
-
-echo [4/4] 后端已启动 (http://localhost:8083)
 pause

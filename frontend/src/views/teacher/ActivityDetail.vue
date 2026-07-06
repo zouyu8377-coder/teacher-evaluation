@@ -43,7 +43,7 @@
             <span class="value">{{ formatDateTime(activity.examStart) }} ~ {{ formatDateTime(activity.examEnd) }}</span>
           </div>
           <div class="info-item" v-else>
-            <span class="label">上传窗口</span>
+            <span class="label">活动时间</span>
             <span class="value">{{ formatDateTime(activity.materialStart) }} ~ {{ formatDateTime(activity.materialEnd) }}</span>
           </div>
           <div class="info-item">
@@ -131,7 +131,7 @@
 
         <template v-if="!myDocument">
           <div class="action-prompt">
-            <p class="prompt-text">请上传您的考核文档（支持 doc, docx, pdf, txt 格式）</p>
+            <p class="prompt-text">请在活动截止前上传您的作品材料（支持 doc, docx, pdf, txt 格式）</p>
             <el-button type="primary" size="large" :disabled="!canUploadDocument" @click="showUploadDialog = true">
               <span class="material-symbols-outlined" style="font-size: 18px; margin-right: 8px;">upload</span>
               上传文档
@@ -323,6 +323,7 @@ const examWindowState = computed(() => {
   const now = new Date()
   const start = activity.value?.examStart ? new Date(activity.value.examStart) : null
   const end = activity.value?.examEnd ? new Date(activity.value.examEnd) : null
+  if (!start || !end) return 'not_configured'
   if (start && now < start) return 'pending'
   if (end && now > end) return 'ended'
   return 'open'
@@ -341,6 +342,12 @@ const canUploadDocument = computed(() => {
   if (actions) {
     return actions.includes('upload_document') || actions.includes('replace_document')
   }
+  if (!activity.value || activity.value.level === 'C') return false
+  const now = new Date()
+  const start = activity.value.materialStart ? new Date(activity.value.materialStart) : null
+  const end = activity.value.materialEnd ? new Date(activity.value.materialEnd) : null
+  if (start && now < start) return false
+  if (end && now > end) return false
   return true
 })
 

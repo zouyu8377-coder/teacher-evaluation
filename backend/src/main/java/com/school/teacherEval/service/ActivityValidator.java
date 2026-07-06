@@ -15,6 +15,7 @@ public class ActivityValidator {
      * 校验活动通用时间规则
      */
     public void validateCommon(Activity activity) {
+        normalizeNonCActivityWindow(activity);
         // 报名时间必填
         if (activity.getEnrollmentStart() == null) {
             throw new BusinessException("报名开始时间不能为空");
@@ -24,6 +25,28 @@ public class ActivityValidator {
         }
         if (activity.getEnrollmentStart().isAfter(activity.getEnrollmentEnd())) {
             throw new BusinessException("报名开始时间必须早于报名结束时间");
+        }
+    }
+
+    /**
+     * 非 C 活动只有一个业务窗口：活动期内可报名、下载资料、上传作品。
+     * 现阶段复用 materialStart/materialEnd 作为活动窗口，并让报名窗口与其保持一致。
+     */
+    public void normalizeNonCActivityWindow(Activity activity) {
+        if (activity == null || activity.getLevel() == Activity.Level.C) {
+            return;
+        }
+        if (activity.getMaterialStart() == null) {
+            activity.setMaterialStart(activity.getEnrollmentStart());
+        }
+        if (activity.getMaterialEnd() == null) {
+            activity.setMaterialEnd(activity.getEnrollmentEnd());
+        }
+        if (activity.getEnrollmentStart() == null) {
+            activity.setEnrollmentStart(activity.getMaterialStart());
+        }
+        if (activity.getEnrollmentEnd() == null) {
+            activity.setEnrollmentEnd(activity.getMaterialEnd());
         }
     }
 
@@ -59,6 +82,7 @@ public class ActivityValidator {
         if (activity.getLevel() == Activity.Level.C) {
             return;
         }
+        normalizeNonCActivityWindow(activity);
         if (activity.getMaterialStart() == null) {
             throw new BusinessException("材料上传开始时间不能为空");
         }
@@ -68,6 +92,8 @@ public class ActivityValidator {
         if (activity.getMaterialStart().isAfter(activity.getMaterialEnd())) {
             throw new BusinessException("材料上传开始时间必须早于材料上传结束时间");
         }
+        activity.setEnrollmentStart(activity.getMaterialStart());
+        activity.setEnrollmentEnd(activity.getMaterialEnd());
     }
 
     /**

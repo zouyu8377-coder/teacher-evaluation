@@ -205,7 +205,11 @@ public class Activity {
     @JsonProperty("timeStatus")
     public TimeStatus getTimeStatus() {
         LocalDateTime now = LocalDateTime.now();
-        if (enrollmentStart != null && now.isBefore(enrollmentStart)) {
+        LocalDateTime start = level == Level.C ? enrollmentStart : materialStart;
+        if (start == null) {
+            start = enrollmentStart;
+        }
+        if (start != null && now.isBefore(start)) {
             return TimeStatus.not_started;
         }
         LocalDateTime end = null;
@@ -213,6 +217,8 @@ public class Activity {
             end = examEnd;
         } else if (materialEnd != null) {
             end = materialEnd;
+        } else {
+            end = enrollmentEnd;
         }
         if (end != null && now.isAfter(end)) {
             return TimeStatus.ended;

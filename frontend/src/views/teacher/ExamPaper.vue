@@ -243,7 +243,13 @@ const loadExamData = async () => {
         if (activityRes.code === 200) {
           const activity = activityRes.data
           const now = new Date()
+          const examStart = activity.examStart ? new Date(activity.examStart) : null
           const examEnd = activity.examEnd ? new Date(activity.examEnd) : null
+          if (!examStart || !examEnd) {
+            ElMessage.error('考试时间未设置')
+            router.push('/teacher/enrollment')
+            return
+          }
           if (examEnd && now > examEnd) {
             ElMessage.error('考试时间已结束，无法继续作答')
             examStarted.value = false
@@ -394,6 +400,11 @@ onMounted(async () => {
       const now = new Date()
       const examStart = activity.examStart ? new Date(activity.examStart) : null
       const examEnd = activity.examEnd ? new Date(activity.examEnd) : null
+      if (!examStart || !examEnd) {
+        ElMessage.error('考试时间未设置')
+        router.push('/teacher/enrollment')
+        return
+      }
       if (examStart && now < examStart) {
         ElMessage.error('考试尚未开始')
         router.push('/teacher/enrollment')

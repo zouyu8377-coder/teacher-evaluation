@@ -3,9 +3,12 @@ package com.school.teacherEval.service;
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Evaluation;
 import com.school.teacherEval.entity.PeriodEnrollment;
+import com.school.teacherEval.entity.TeacherLevel;
+import com.school.teacherEval.entity.User;
 import com.school.teacherEval.repository.ActivityRepository;
 import com.school.teacherEval.repository.EnrollmentRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
+import com.school.teacherEval.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +21,7 @@ public class EnrollmentEligibilityService {
     private final ActivityRepository activityRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final EvaluationRepository evaluationRepository;
+    private final UserRepository userRepository;
 
     public boolean canEnroll(Long teacherId, Activity targetActivity) {
         Activity.Level targetLevel = targetActivity.getLevel();
@@ -26,6 +30,10 @@ public class EnrollmentEligibilityService {
         }
 
         if (targetLevel.getPrevLevels().isEmpty()) {
+            return true;
+        }
+
+        if (hasRequiredPersistedLevel(teacherId, targetLevel)) {
             return true;
         }
 
@@ -52,5 +60,14 @@ public class EnrollmentEligibilityService {
         }
 
         return false;
+    }
+
+    private boolean hasRequiredPersistedLevel(Long teacherId, Activity.Level targetLevel) {
+        User user = userRepository.findById(teacherId).orElse(null);
+        if (user == null || user.getTeacherLevel() == null || user.getTeacherLevel() == TeacherLevel.NONE) {
+            return false;
+        }
+        TeacherLevel currentLevel = user.getTeacherLevel();
+        return currentLevel.getTier() == targetLevel.getTier() - 1;
     }
 }

@@ -169,8 +169,18 @@ const levelForm = reactive({
 })
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, max: 50, message: '用户名长度需为3-50位', trigger: 'blur' },
+    { pattern: /^[A-Za-z0-9_.-]+$/, message: '用户名仅支持字母、数字、下划线、短横线和点', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, max: 64, message: '密码长度需为6-64位', trigger: 'blur' }
+  ],
+  newPassword: [
+    { min: 6, max: 64, message: '密码长度需为6-64位', trigger: 'blur' }
+  ],
   realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
   department: [{ required: true, message: '请输入部门', trigger: 'blur' }]
@@ -191,7 +201,8 @@ const loadData = async () => {
 
 const handleAdd = () => {
   editId.value = null
-  Object.assign(form, { username: '', password: '', realName: '', role: 'teacher', department: '' })
+  resetPassword.value = false
+  Object.assign(form, { username: '', password: '', newPassword: '', realName: '', role: 'teacher', department: '' })
   dialogVisible.value = true
 }
 
