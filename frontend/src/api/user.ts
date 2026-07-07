@@ -69,3 +69,9 @@ export const importUsers = (file: File) => {
   formData.append('file', file)
   return api.post('/users/import', formData) as Promise<ApiResponse<UserImportResult>>
 }
+
+export const previewImportUsers = (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api.post('/users/import/preview', formData) as Promise<ApiResponse<UserImportResult>>
+}

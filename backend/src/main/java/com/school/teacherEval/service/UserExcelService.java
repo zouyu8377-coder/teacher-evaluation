@@ -22,9 +22,10 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.InputStream;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 @Service
@@ -33,8 +34,15 @@ public class UserExcelService {
 
     private static final String USER_SHEET = "用户数据";
     private static final String[] HEADERS = {
-            "ID", "用户名", "密码", "姓名", "角色", "部门", "状态", "教师等级", "创建时间"
+            "用户名", "密码", "姓名", "角色", "部门", "状态", "教师等级", "创建时间"
     };
+    private static final int COL_USERNAME = 0;
+    private static final int COL_PASSWORD = 1;
+    private static final int COL_REAL_NAME = 2;
+    private static final int COL_ROLE = 3;
+    private static final int COL_DEPARTMENT = 4;
+    private static final int COL_STATUS = 5;
+    private static final int COL_TEACHER_LEVEL = 6;
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[A-Za-z0-9_.-]{3,50}$");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -69,8 +77,16 @@ public class UserExcelService {
         return workbook;
     }
 
+    public UserImportResultDTO previewImport(MultipartFile file) {
+        return processImport(file, false);
+    }
+
     @Transactional
     public UserImportResultDTO importUsers(MultipartFile file) {
+        return processImport(file, true);
+    }
+
+    private UserImportResultDTO processImport(MultipartFile file, boolean persist) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("上传文件不能为空");
         }
@@ -83,12 +99,13 @@ public class UserExcelService {
             }
 
             UserImportResultDTO result = new UserImportResultDTO();
+            Set<String> seenUsernames = new HashSet<>();
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row == null || isRowEmpty(row)) {
                     continue;
                 }
-                importRow(row, i + 1, result);
+                importRow(row, i + 1, result, seenUsernames, persist);
             }
             return result;
         } catch (BusinessException e) {
@@ -111,24 +128,22 @@ public class UserExcelService {
 
         if (withSamples) {
             Row teacher = sheet.createRow(1);
-            teacher.createCell(0).setCellValue("");
-            teacher.createCell(1).setCellValue("teacher_demo");
-            teacher.createCell(2).setCellValue("teacher123");
-            teacher.createCell(3).setCellValue("示例教师");
-            teacher.createCell(4).setCellValue("teacher");
-            teacher.createCell(5).setCellValue("语文组");
-            teacher.createCell(6).setCellValue("1");
-            teacher.createCell(7).setCellValue("NONE");
+            teacher.createCell(COL_USERNAME).setCellValue("teacher_demo");
+            teacher.createCell(COL_PASSWORD).setCellValue("teacher123");
+            teacher.createCell(COL_REAL_NAME).setCellValue("示例教师");
+            teacher.createCell(COL_ROLE).setCellValue("teacher");
+            teacher.createCell(COL_DEPARTMENT).setCellValue("语文组");
+            teacher.createCell(COL_STATUS).setCellValue("启用");
+            teacher.createCell(COL_TEACHER_LEVEL).setCellValue("NONE");
 
             Row evaluator = sheet.createRow(2);
-            evaluator.createCell(0).setCellValue("");
-            evaluator.createCell(1).setCellValue("evaluator_demo");
-            evaluator.createCell(2).setCellValue("evaluator123");
-            evaluator.createCell(3).setCellValue("示例评分员");
-            evaluator.createCell(4).setCellValue("evaluator");
-            evaluator.createCell(5).setCellValue("教研组");
-            evaluator.createCell(6).setCellValue("1");
-            evaluator.createCell(7).setCellValue("NONE");
+            evaluator.createCell(COL_USERNAME).setCellValue("evaluator_demo");
+            evaluator.createCell(COL_PASSWORD).setCellValue("evaluator123");
+            evaluator.createCell(COL_REAL_NAME).setCellValue("示例评分员");
+            evaluator.createCell(COL_ROLE).setCellValue("evaluator");
+            evaluator.createCell(COL_DEPARTMENT).setCellValue("教研组");
+            evaluator.createCell(COL_STATUS).setCellValue("启用");
+            evaluator.createCell(COL_TEACHER_LEVEL).setCellValue("NONE");
         }
 
         autoSizeColumns(sheet);
@@ -138,17 +153,19 @@ public class UserExcelService {
     private void createInstructionSheet(Workbook workbook) {
         Sheet sheet = workbook.createSheet("填写说明");
         String[] lines = {
-                "1. 新增用户：ID 留空，用户名、密码、姓名、角色必填。",
-                "2. 修改用户：ID 填现有用户 ID，只会替换本行非空字段；密码留空表示不修改密码。",
-                "3. 用户名仅支持 3-50 位字母、数字、下划线、短横线和点。",
-                "4. 角色可填 teacher / evaluator / admin，也可填 教师 / 评分员 / 管理员。",
-                "5. 状态可填 1/0、启用/禁用；留空时新增用户默认启用。",
-                "6. 教师等级可填 NONE / C / B / A，也可填 无 / C级 / B级 / A级。非教师用户建议留空或填 NONE。"
+                "1. 用户名是唯一校验字段，模板内不能重复；模板不使用 ID 列。",
+                "2. 用户名不存在时新增用户，用户名、密码、姓名、角色为必填。",
+                "3. 用户名已存在时更新该用户，仅覆盖本行非空字段；密码留空表示不修改密码。",
+                "4. 用户名仅支持 3-50 位字母、数字、下划线、短横线和点。",
+                "5. 角色可填 teacher / evaluator / admin，也可填 教师 / 评分员 / 管理员。",
+                "6. 状态建议填 启用 / 禁用；也兼容 1 / 0，其中 1=启用，0=禁用；新增用户留空默认启用。",
+                "7. 教师等级可填 NONE / C / B / A，也可填 无 / C级 / B级 / A级；非教师用户建议留空或填 NONE。",
+                "8. 创建时间仅用于导出查看，导入时会被忽略。"
         };
         for (int i = 0; i < lines.length; i++) {
             sheet.createRow(i).createCell(0).setCellValue(lines[i]);
         }
-        sheet.setColumnWidth(0, 12000);
+        sheet.setColumnWidth(0, 16000);
     }
 
     private CellStyle createHeaderStyle(Workbook workbook) {
@@ -160,106 +177,114 @@ public class UserExcelService {
     }
 
     private void writeUserRow(Row row, User user) {
-        row.createCell(0).setCellValue(user.getId());
-        row.createCell(1).setCellValue(user.getUsername());
-        row.createCell(2).setCellValue("");
-        row.createCell(3).setCellValue(nullToEmpty(user.getRealName()));
-        row.createCell(4).setCellValue(user.getRole().name());
-        row.createCell(5).setCellValue(nullToEmpty(user.getDepartment()));
-        row.createCell(6).setCellValue(user.getStatus() == null ? 1 : user.getStatus());
-        row.createCell(7).setCellValue(user.getTeacherLevel() == null ? TeacherLevel.NONE.name() : user.getTeacherLevel().name());
+        row.createCell(COL_USERNAME).setCellValue(user.getUsername());
+        row.createCell(COL_PASSWORD).setCellValue("");
+        row.createCell(COL_REAL_NAME).setCellValue(nullToEmpty(user.getRealName()));
+        row.createCell(COL_ROLE).setCellValue(user.getRole().name());
+        row.createCell(COL_DEPARTMENT).setCellValue(nullToEmpty(user.getDepartment()));
+        row.createCell(COL_STATUS).setCellValue(user.getStatus() == null || user.getStatus() == 1 ? "启用" : "禁用");
+        row.createCell(COL_TEACHER_LEVEL).setCellValue(user.getTeacherLevel() == null ? TeacherLevel.NONE.name() : user.getTeacherLevel().name());
         if (user.getCreatedAt() != null) {
-            row.createCell(8).setCellValue(user.getCreatedAt().format(DATE_TIME_FORMATTER));
+            row.createCell(7).setCellValue(user.getCreatedAt().format(DATE_TIME_FORMATTER));
         }
     }
 
-    private void importRow(Row row, int rowNumber, UserImportResultDTO result) {
+    private void importRow(Row row, int rowNumber, UserImportResultDTO result, Set<String> seenUsernames, boolean persist) {
         try {
-            Long id = parseLong(getCellValue(row.getCell(0)));
-            if (id != null) {
-                updateExistingUser(id, row, rowNumber, result);
+            String username = require(row, COL_USERNAME, rowNumber, "用户名");
+            validateUsername(username);
+            String usernameKey = username.toLowerCase(Locale.ROOT);
+            if (!seenUsernames.add(usernameKey)) {
+                throw new BusinessException("用户名在模板中重复: " + username);
+            }
+
+            User existingUser = userRepository.findByUsername(username).orElse(null);
+            if (existingUser == null) {
+                createNewUser(row, rowNumber, result, username, persist);
             } else {
-                createNewUser(row, rowNumber, result);
+                updateExistingUser(existingUser, row, result, persist);
             }
         } catch (Exception e) {
             result.skipped("第 " + rowNumber + " 行: " + e.getMessage());
         }
     }
 
-    private void updateExistingUser(Long id, Row row, int rowNumber, UserImportResultDTO result) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new BusinessException("ID " + id + " 对应用户不存在"));
+    private void updateExistingUser(User user, Row row, UserImportResultDTO result, boolean persist) {
+        if (!hasAnyUpdateField(row)) {
+            throw new BusinessException("没有可更新的非空字段");
+        }
 
-        String username = trim(getCellValue(row.getCell(1)));
-        if (hasText(username)) {
-            validateUsername(username);
-            Optional<User> sameUsername = userRepository.findByUsername(username);
-            if (sameUsername.isPresent() && !sameUsername.get().getId().equals(id)) {
-                throw new BusinessException("用户名已被其他用户使用: " + username);
+        if (persist) {
+            String password = trim(getCellValue(row.getCell(COL_PASSWORD)));
+            if (hasText(password)) {
+                validatePassword(password);
+                user.setPassword(passwordEncoder.encode(password));
             }
-            user.setUsername(username);
+            applyNonEmptyFields(user, row);
+            userRepository.save(user);
         }
-
-        String password = trim(getCellValue(row.getCell(2)));
-        if (hasText(password)) {
-            validatePassword(password);
-            user.setPassword(passwordEncoder.encode(password));
-        }
-
-        applyNonEmptyFields(user, row, rowNumber);
-        userRepository.save(user);
         result.updated();
     }
 
-    private void createNewUser(Row row, int rowNumber, UserImportResultDTO result) {
-        String username = require(row, 1, rowNumber, "用户名");
-        String password = require(row, 2, rowNumber, "密码");
-        String realName = require(row, 3, rowNumber, "姓名");
-        User.Role role = parseRole(require(row, 4, rowNumber, "角色"));
+    private void createNewUser(Row row, int rowNumber, UserImportResultDTO result, String username, boolean persist) {
+        String password = require(row, COL_PASSWORD, rowNumber, "密码");
+        String realName = require(row, COL_REAL_NAME, rowNumber, "姓名");
+        User.Role role = parseRole(require(row, COL_ROLE, rowNumber, "角色"));
 
-        validateUsername(username);
         validatePassword(password);
-        if (userRepository.existsByUsername(username)) {
+
+        if (persist && userRepository.existsByUsername(username)) {
             throw new BusinessException("用户名已存在: " + username);
         }
 
-        User user = new User();
-        user.setUsername(username);
-        user.setPassword(passwordEncoder.encode(password));
-        user.setRealName(realName);
-        user.setRole(role);
-        user.setDepartment(trim(getCellValue(row.getCell(5))));
-        user.setStatus(parseStatus(getCellValue(row.getCell(6)), 1));
-        user.setTeacherLevel(parseTeacherLevel(getCellValue(row.getCell(7)), TeacherLevel.NONE));
-        userRepository.save(user);
+        if (persist) {
+            User user = new User();
+            user.setUsername(username);
+            user.setPassword(passwordEncoder.encode(password));
+            user.setRealName(realName);
+            user.setRole(role);
+            user.setDepartment(trim(getCellValue(row.getCell(COL_DEPARTMENT))));
+            user.setStatus(parseStatus(getCellValue(row.getCell(COL_STATUS)), 1));
+            user.setTeacherLevel(parseTeacherLevel(getCellValue(row.getCell(COL_TEACHER_LEVEL)), TeacherLevel.NONE));
+            userRepository.save(user);
+        }
         result.created();
     }
 
-    private void applyNonEmptyFields(User user, Row row, int rowNumber) {
-        String realName = trim(getCellValue(row.getCell(3)));
+    private void applyNonEmptyFields(User user, Row row) {
+        String realName = trim(getCellValue(row.getCell(COL_REAL_NAME)));
         if (hasText(realName)) {
             user.setRealName(realName);
         }
 
-        String role = trim(getCellValue(row.getCell(4)));
+        String role = trim(getCellValue(row.getCell(COL_ROLE)));
         if (hasText(role)) {
             user.setRole(parseRole(role));
         }
 
-        String department = trim(getCellValue(row.getCell(5)));
+        String department = trim(getCellValue(row.getCell(COL_DEPARTMENT)));
         if (hasText(department)) {
             user.setDepartment(department);
         }
 
-        String status = trim(getCellValue(row.getCell(6)));
+        String status = trim(getCellValue(row.getCell(COL_STATUS)));
         if (hasText(status)) {
             user.setStatus(parseStatus(status, user.getStatus() == null ? 1 : user.getStatus()));
         }
 
-        String teacherLevel = trim(getCellValue(row.getCell(7)));
+        String teacherLevel = trim(getCellValue(row.getCell(COL_TEACHER_LEVEL)));
         if (hasText(teacherLevel)) {
             user.setTeacherLevel(parseTeacherLevel(teacherLevel, user.getTeacherLevel()));
         }
+    }
+
+    private boolean hasAnyUpdateField(Row row) {
+        for (int i = COL_PASSWORD; i <= COL_TEACHER_LEVEL; i++) {
+            if (hasText(getCellValue(row.getCell(i)))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private User.Role parseRole(String value) {
@@ -273,7 +298,7 @@ public class UserExcelService {
     }
 
     private Integer parseStatus(String value, Integer defaultValue) {
-        String normalized = trim(value);
+        String normalized = trim(value).toLowerCase(Locale.ROOT);
         if (!hasText(normalized)) {
             return defaultValue;
         }
@@ -346,18 +371,6 @@ public class UserExcelService {
             return cell.getCellFormula();
         }
         return cell.getStringCellValue();
-    }
-
-    private Long parseLong(String value) {
-        String text = trim(value);
-        if (!hasText(text)) {
-            return null;
-        }
-        try {
-            return Long.parseLong(text);
-        } catch (NumberFormatException e) {
-            throw new BusinessException("ID 必须为整数: " + value);
-        }
     }
 
     private void autoSizeColumns(Sheet sheet) {

@@ -111,6 +111,13 @@ public class UserController {
     public ApiResponse<UserImportResultDTO> importUsers(@RequestParam MultipartFile file) {
         return ApiResponse.success(userExcelService.importUsers(file));
     }
+
+    @PostMapping("/import/preview")
+    @Operation(summary = "预览Excel批量导入或更新用户")
+    @PreAuthorize("hasRole('admin')")
+    public ApiResponse<UserImportResultDTO> previewImportUsers(@RequestParam MultipartFile file) {
+        return ApiResponse.success(userExcelService.previewImport(file));
+    }
     
     @PostMapping
     @Operation(summary = "创建用户")

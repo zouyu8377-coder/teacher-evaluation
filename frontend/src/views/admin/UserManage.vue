@@ -114,12 +114,12 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showImportDialog" title="导入用户" width="560px" @closed="resetImport">
+    <el-dialog v-model="showImportDialog" title="导入用户" width="580px" @closed="resetImport">
       <el-alert
         type="info"
         :closable="false"
         show-icon
-        title="ID 为空时新增用户；ID 命中现有用户时，仅更新表格中非空字段。密码留空表示不修改密码。"
+        title="模板以用户名作为唯一校验字段。用户名已存在时，仅覆盖模板中的非空字段；密码留空表示不修改密码。状态建议填写“启用/禁用”，也兼容 1/0（1=启用，0=禁用）。"
       />
       <el-upload
         class="import-upload"
@@ -146,7 +146,7 @@
       </div>
       <template #footer>
         <el-button @click="showImportDialog = false">关闭</el-button>
-        <el-button type="primary" :loading="importing" @click="handleImport">开始导入</el-button>
+        <el-button type="primary" :loading="importing" @click="handleImport">预览并导入</el-button>
       </template>
     </el-dialog>
 
@@ -186,6 +186,7 @@ import {
   downloadUserTemplate,
   exportUsers,
   importUsers,
+  previewImportUsers,
   type UserImportResult
 } from '@/api/user'
 
@@ -382,6 +383,7 @@ const handleImportFileChange = (file: any) => {
 
 const handleImportFileRemove = () => {
   importFile.value = null
+  importResult.value = null
 }
 
 const handleImport = async () => {
@@ -391,6 +393,22 @@ const handleImport = async () => {
   }
   importing.value = true
   try {
+    const previewRes = await previewImportUsers(importFile.value)
+    if (previewRes.code !== 200) return
+
+    importResult.value = previewRes.data
+    const writableCount = previewRes.data.createdCount + previewRes.data.updatedCount
+    if (writableCount === 0) {
+      ElMessage.warning('没有可导入的数据，请检查模板内容')
+      return
+    }
+
+    await ElMessageBox.confirm(
+      `本次将新增 ${previewRes.data.createdCount} 个用户，更新 ${previewRes.data.updatedCount} 个用户，跳过 ${previewRes.data.skippedCount} 行。确认导入吗？`,
+      '确认导入用户',
+      { type: 'warning', confirmButtonText: '确认导入', cancelButtonText: '取消' }
+    )
+
     const res = await importUsers(importFile.value)
     if (res.code === 200) {
       importResult.value = res.data
