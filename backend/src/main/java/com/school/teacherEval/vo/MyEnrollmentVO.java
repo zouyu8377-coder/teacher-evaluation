@@ -29,6 +29,10 @@ public class MyEnrollmentVO {
     private String examStatus;
     private LocalDateTime examSubmittedAt;
     private Long documentId;
+    private String materialStatus;
+    private LocalDateTime materialSubmittedAt;
+    private Boolean canConfirmMaterial;
+    private Boolean canCancelMaterial;
     private Boolean scorePublished;
     private java.math.BigDecimal finalScore;
     private Boolean isPassed;

@@ -32,6 +32,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/activities")
@@ -134,6 +135,15 @@ public class ActivityController {
                 vo.setExamStatus(examRecord != null && examRecord.getStatus() != null ? examRecord.getStatus().name() : null);
                 vo.setExamSubmittedAt(examRecord != null ? examRecord.getSubmittedAt() : null);
                 vo.setDocumentId(docOpt.map(Document::getId).orElse(null));
+                if (activity.getLevel() != Activity.Level.C) {
+                    PeriodEnrollment effectiveEnrollment = docOpt.isPresent()
+                            ? documentService.autoConfirmIfExpired(activity, e)
+                            : e;
+                    vo.setMaterialStatus(getMaterialStatus(activity, effectiveEnrollment, docOpt.isPresent()));
+                    vo.setMaterialSubmittedAt(effectiveEnrollment.getMaterialSubmittedAt());
+                    vo.setCanConfirmMaterial(canConfirmMaterial(activity, effectiveEnrollment, docOpt.isPresent()));
+                    vo.setCanCancelMaterial(canCancelMaterial(activity, effectiveEnrollment));
+                }
                 vo.setScorePublished(publishedEval.isPresent());
                 vo.setFinalScore(publishedEval.map(Evaluation::getFinalScore).orElse(null));
                 vo.setIsPassed(publishedEval.map(Evaluation::getIsPassed).orElse(null));
@@ -169,7 +179,7 @@ public class ActivityController {
     @PreAuthorize("hasRole('admin')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         activityService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("success", null);
     }
     
     @GetMapping(value = "/{id}/review-progress", produces = "application/json;charset=UTF-8")
@@ -179,30 +189,59 @@ public class ActivityController {
         List<User> enrolledTeachers = enrollmentService.getEnrolledTeachersByActivity(id);
         int totalTeachers = enrolledTeachers.size();
         int submittedTeachers = totalTeachers;
+        Set<Long> reviewableTeacherIds = enrolledTeachers.stream()
+            .map(User::getId)
+            .collect(java.util.stream.Collectors.toSet());
         if (activity.getLevel() != Activity.Level.C) {
-            submittedTeachers = (int) enrolledTeachers.stream()
-                .filter(teacher -> documentService.getLatestDocument(teacher.getId(), id).isPresent())
-                .count();
+            reviewableTeacherIds = enrolledTeachers.stream()
+                .filter(teacher -> {
+                    Optional<Document> docOpt = documentService.getLatestDocument(teacher.getId(), id);
+                    PeriodEnrollment enrollment = enrollmentService.getEnrollment(id, teacher.getId());
+                    if (docOpt.isPresent()) {
+                        enrollment = documentService.autoConfirmIfExpired(activity, enrollment);
+                    }
+                    return documentService.isMaterialReviewable(activity, enrollment, docOpt.isPresent());
+                })
+                .map(User::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+            Set<Long> evaluatedTeacherIds = evaluationService.getActivitySummary(id, null).getEvaluations() == null
+                ? Set.of()
+                : evaluationService.getActivitySummary(id, null).getEvaluations().stream()
+                    .filter(e -> e.getScore() != null)
+                    .filter(e -> e.getStatus() == Evaluation.Status.submitted)
+                    .map(Evaluation::getTeacherId)
+                    .collect(java.util.stream.Collectors.toSet());
+            reviewableTeacherIds = new java.util.HashSet<>(reviewableTeacherIds);
+            reviewableTeacherIds.addAll(evaluatedTeacherIds);
+            submittedTeachers = reviewableTeacherIds.size();
         }
         int totalRequired = submittedTeachers * (activity.getReviewerCount() != null ? activity.getReviewerCount() : 0);
 
-        // 解析评分人ID列表
+        // 闁荤喐鐟辩徊楣冩倵閻ｅ本瀚氶柛鏇ㄥ亜閻庤霉濠婂懐妲癉闂佸憡甯楅〃澶愬Υ?
         List<Long> reviewerIdList = new ArrayList<>();
         if (activity.getReviewerIds() != null && !activity.getReviewerIds().isEmpty()) {
             try {
                 reviewerIdList = new ObjectMapper().readValue(activity.getReviewerIds(),
                     new TypeReference<List<Long>>() {});
             } catch (Exception e) {
-                log.error("解析reviewerIds失败", e);
+                log.error("瑙ｆ瀽 reviewerIds 澶辫触", e);
             }
         }
 
-        // 获取每个评分人的批阅数量
+        // 闂佸吋鍎抽崲鑼躲亹閸ヮ灝鎺曠疀鎼淬劌娈濋柣鐘叉搐鐎氼剟宕规惔銏㈩洸闁惧繗顫夐悾閬嶆煙闂堟稓绉烘俊鎻掑瀵偅瀵奸弶鎴烆仭
         List<ReviewerStatVO> reviewerStats = new ArrayList<>();
         for (Long reviewerId : reviewerIdList) {
             User evaluator = userService.getUserById(reviewerId);
             if (evaluator != null) {
-                long completedCount = evaluationService.countByActivityIdAndEvaluatorId(id, reviewerId);
+                final Set<Long> countedTeacherIds = reviewableTeacherIds;
+                long completedCount = evaluationService.getActivitySummary(id, null).getEvaluations() == null
+                    ? 0
+                    : evaluationService.getActivitySummary(id, null).getEvaluations().stream()
+                        .filter(e -> reviewerId.equals(e.getEvaluatorId()))
+                        .filter(e -> countedTeacherIds.contains(e.getTeacherId()))
+                        .filter(e -> e.getScore() != null)
+                        .count();
                 reviewerStats.add(new ReviewerStatVO(
                     reviewerId,
                     evaluator.getRealName(),
@@ -212,25 +251,24 @@ public class ActivityController {
             }
         }
 
-        // 计算总完成数
+        // 闁荤姳绶ょ槐鏇㈡偩婵犳艾绠戦悹鍥皺閺嗘岸鏌熺€涙ê濮堥柡?
         long totalCompleted = reviewerStats.stream()
             .mapToLong(ReviewerStatVO::getCompletedCount)
             .sum();
 
-        // 判断评分状态
+        // 闂佸憡甯囬崐鏍蓟閸モ晜瀚氶柛鏇ㄥ亜閻庡鏌ｅΟ鍨厫闁?
         String reviewStatus;
-        if (activity.getScoresPublished() != null && activity.getScoresPublished()) {
-            reviewStatus = "已发布";
+        if (Boolean.TRUE.equals(activity.getScoresPublished())) {
+            reviewStatus = "published";
         } else if (totalRequired > 0 && totalCompleted >= totalRequired) {
-            reviewStatus = "评分完成";
+            reviewStatus = "complete";
         } else if (totalCompleted > 0) {
-            reviewStatus = "评分中";
+            reviewStatus = "in_progress";
         } else if (totalRequired > 0) {
-            reviewStatus = "待评分";
+            reviewStatus = "pending";
         } else {
-            reviewStatus = "未配置";
+            reviewStatus = "not_configured";
         }
-
         ReviewProgressVO result = new ReviewProgressVO(
             totalTeachers,
             activity.getReviewerCount(),
@@ -275,7 +313,7 @@ public class ActivityController {
         vo.setEndDate(activity.getEndDate());
         vo.setReviewerCount(activity.getReviewerCount());
 
-        // 查询当前用户的报名详情
+        // 闂佸搫琚崕鎾敋濡ゅ嫨浜归柟鎯у暱椤ゅ懘鏌ｉ～顒€濡介柛鈺傜洴閹啴宕熼鈧闂佸憡鑹剧粔鐑筋敋濞戙垹绠?
         List<PeriodEnrollment> enrollments = enrollmentService.getTeacherEnrollments(teacherId);
         Optional<PeriodEnrollment> myEnrollment = enrollments.stream()
             .filter(e -> e.getActivityId().equals(id) && e.getStatus() == PeriodEnrollment.Status.enrolled)
@@ -286,7 +324,7 @@ public class ActivityController {
             vo.setEnrolledAt(enrollment.getEnrolledAt());
             vo.setEnrollmentStatus(enrollment.getStatus() != null ? enrollment.getStatus().name() : null);
 
-            // 查询考试记录
+            // 闂佸搫琚崕鎾敋濡ゅ懏鍤€闁告劦鍘惧Σ鎼佹偣娴ｈ绶茬紓?
             ExamRecord examRecord = examRecordService.getRecordByTeacherAndActivity(teacherId, id);
             if (examRecord != null) {
                 vo.setExamRecordId(examRecord.getId());
@@ -295,7 +333,7 @@ public class ActivityController {
                 vo.setExamSubmittedAt(examRecord.getSubmittedAt());
             }
 
-            // 查询文档
+            // 闂佸搫琚崕鎾敋濡ゅ懎妫橀柛銉ｅ妸閳?
             Optional<Document> docOpt = documentService.getLatestDocument(teacherId, id);
             if (docOpt.isPresent()) {
                 Document doc = docOpt.get();
@@ -304,9 +342,17 @@ public class ActivityController {
                 vo.setDocumentFileName(doc.getFileName());
                 vo.setDocumentFileSize(doc.getFileSize());
                 vo.setDocumentCreatedAt(doc.getCreatedAt());
-            }
+            if (activity.getLevel() != Activity.Level.C) {
+                PeriodEnrollment effectiveEnrollment = docOpt.isPresent()
+                        ? documentService.autoConfirmIfExpired(activity, enrollment)
+                        : enrollment;
+                vo.setMaterialStatus(getMaterialStatus(activity, effectiveEnrollment, docOpt.isPresent()));
+                vo.setMaterialSubmittedAt(effectiveEnrollment.getMaterialSubmittedAt());
+                vo.setCanConfirmMaterial(canConfirmMaterial(activity, effectiveEnrollment, docOpt.isPresent()));
+                vo.setCanCancelMaterial(canCancelMaterial(activity, effectiveEnrollment));
+            }            }
 
-            // 查询评分（已发布）
+            // 闂佸搫琚崕鎾敋濡ゅ啯瀚氶柛鏇ㄥ亜閻庡鏌ㄥ☉妯煎闁告埊绻濆畷锝夊箣濠靛牜浼岄梺?
             List<Evaluation> evaluations = evaluationService.getActivityTeacherEvaluations(id, teacherId);
             Optional<Evaluation> publishedEval = evaluations.stream()
                 .filter(ev -> Boolean.TRUE.equals(ev.getIsPublished()))
@@ -346,7 +392,7 @@ public class ActivityController {
     public ApiResponse<Void> enroll(@PathVariable Long id) {
         User user = getCurrentUser();
         enrollmentService.enroll(id, user.getId());
-        return ApiResponse.success("报名成功", null);
+        return ApiResponse.success("success", null);
     }
 
     @GetMapping(value = "/{id}/enrollments", produces = "application/json;charset=UTF-8")
@@ -360,9 +406,21 @@ public class ActivityController {
                 Long examRecordId = null;
                 LocalDateTime submittedAt = null;
                 String submissionStatus = "not_started";
+                String materialStatus = null;
 
                 java.math.BigDecimal examScore = null;
+                java.math.BigDecimal finalScore = null;
                 Boolean isPassed = null;
+                var publishedEvaluation = evaluationService.getActivitySummary(id, null).getEvaluations().stream()
+                        .filter(ev -> teacher.getId().equals(ev.getTeacherId()))
+                        .filter(ev -> Boolean.TRUE.equals(ev.getIsPublished()))
+                        .filter(ev -> ev.getFinalScore() != null)
+                        .findFirst();
+                if (publishedEvaluation.isPresent()) {
+                    finalScore = publishedEvaluation.get().getFinalScore();
+                    isPassed = publishedEvaluation.get().getIsPassed();
+                }
+
                 if (activity.getLevel() == Activity.Level.C) {
                     ExamRecord examRecord = examRecordService.getRecordByTeacherAndActivity(teacher.getId(), id);
                     if (examRecord != null) {
@@ -379,16 +437,29 @@ public class ActivityController {
                                 submissionStatus = examRecord.getStatus() != null ? examRecord.getStatus().name() : "not_started";
                             }
                         }
-                        // 成绩已发布时计算是否通过
-                        if (Boolean.TRUE.equals(activity.getScoresPublished()) && examScore != null && activity.getPassingScore() != null) {
-                            isPassed = examScore.compareTo(activity.getPassingScore()) >= 0;
+                        // 闂佺懓鐡ㄩ崝妤呭传濡も偓椤斿繘骞撻幒鎴犲矝闁汇埄鍨伴崯顖氼渻閸屾粍濯奸柨娑樺閺嗩剟鏌￠崟闈涚仩闁诡垯绶氶弻鍛潩瀹曞洨鐣?
+                        if (Boolean.TRUE.equals(activity.getScoresPublished()) && activity.getPassingScore() != null) {
+                            java.math.BigDecimal scoreForResult = finalScore != null ? finalScore : examScore;
+                            if (scoreForResult != null) {
+                                isPassed = scoreForResult.compareTo(activity.getPassingScore()) >= 0;
+                            }
                         }
                     }
                 } else {
                     var docOpt = documentService.getLatestDocument(teacher.getId(), id);
                     if (docOpt.isPresent()) {
+                        enrollment = documentService.autoConfirmIfExpired(activity, enrollment);
                         submittedAt = docOpt.get().getCreatedAt();
-                        submissionStatus = "submitted";
+                        materialStatus = getMaterialStatus(activity, enrollment, true);
+                        submissionStatus = documentService.isMaterialReviewable(activity, enrollment, true)
+                                ? "submitted"
+                                : "uploaded_unconfirmed";
+                    } else {
+                        materialStatus = getMaterialStatus(activity, enrollment, false);
+                        LocalDateTime materialEnd = documentService.getMaterialEnd(activity);
+                        if (materialEnd != null && LocalDateTime.now().isAfter(materialEnd)) {
+                            submissionStatus = "not_submitted";
+                        }
                     }
                 }
 
@@ -401,11 +472,62 @@ public class ActivityController {
                     examRecordId,
                     submittedAt,
                     submissionStatus,
+                    materialStatus,
                     examScore,
+                    finalScore,
                     isPassed
                 );
             })
             .collect(java.util.stream.Collectors.toList());
         return ApiResponse.success(result);
     }
+
+    private String getMaterialStatus(Activity activity, PeriodEnrollment enrollment, boolean hasDocument) {
+        if (activity == null || activity.getLevel() == Activity.Level.C) {
+            return null;
+        }
+        if (enrollment == null || !hasDocument) {
+            return "not_submitted";
+        }
+        PeriodEnrollment.MaterialStatus status = enrollment.getMaterialStatus();
+        if (status == PeriodEnrollment.MaterialStatus.submitted) {
+            return "submitted";
+        }
+        if (status == PeriodEnrollment.MaterialStatus.auto_submitted) {
+            return "auto_submitted";
+        }
+        LocalDateTime end = documentService.getMaterialEnd(activity);
+        if (end != null && !LocalDateTime.now().isBefore(end)) {
+            return "auto_submitted";
+        }
+        return "draft";
+    }
+
+    private boolean canConfirmMaterial(Activity activity, PeriodEnrollment enrollment, boolean hasDocument) {
+        if (activity == null || activity.getLevel() == Activity.Level.C || enrollment == null || !hasDocument) {
+            return false;
+        }
+        if (enrollment.getMaterialStatus() == PeriodEnrollment.MaterialStatus.submitted
+                || enrollment.getMaterialStatus() == PeriodEnrollment.MaterialStatus.auto_submitted) {
+            return false;
+        }
+        LocalDateTime end = documentService.getMaterialEnd(activity);
+        return end == null || LocalDateTime.now().isBefore(end);
+    }
+
+    private boolean canCancelMaterial(Activity activity, PeriodEnrollment enrollment) {
+        if (activity == null || activity.getLevel() == Activity.Level.C || enrollment == null) {
+            return false;
+        }
+        if (enrollment.getMaterialStatus() != PeriodEnrollment.MaterialStatus.submitted) {
+            return false;
+        }
+        LocalDateTime end = documentService.getMaterialEnd(activity);
+        if (end != null && !LocalDateTime.now().isBefore(end)) {
+            return false;
+        }
+        return evaluationService.getActivityTeacherEvaluations(activity.getId(), enrollment.getTeacherId()).stream()
+                .noneMatch(e -> e.getScore() != null);
+    }
 }
+

@@ -16,6 +16,7 @@ export interface LevelInfo {
   levelName: string
   hasPassed: boolean
   passedAt: string | null
+  finalScore?: number | null
   nextLevel: string
   canEnrollNext: boolean
 }

@@ -132,7 +132,7 @@
         <template v-if="!myDocument">
           <div class="action-prompt">
             <p class="prompt-text">请在活动截止前上传您的作品材料（支持 doc, docx, pdf, txt 格式）</p>
-            <el-button type="primary" size="large" :disabled="!canUploadDocument" @click="showUploadDialog = true">
+            <el-button type="primary" size="large" :disabled="!canEditMaterial" @click="showUploadDialog = true">
               <span class="material-symbols-outlined" style="font-size: 18px; margin-right: 8px;">upload</span>
               上传文档
             </el-button>
@@ -140,22 +140,44 @@
         </template>
 
         <template v-else-if="!scorePublished">
-          <div class="document-uploaded">
-            <div class="document-info">
-              <span class="material-symbols-outlined doc-icon">description</span>
-              <div class="doc-details">
-                <h4>{{ myDocument.title }}</h4>
-                <p>{{ myDocument.fileName }} · {{ formatFileSize(myDocument.fileSize) }}</p>
+          <div class="document-uploaded document-list-panel">
+            <div class="document-list-header">
+              <div>
+                <h4>已上传材料</h4>
+                <p>可同时上传多份材料，确认提交后进入评分</p>
               </div>
+              <el-button v-if="canEditMaterial" type="primary" @click="showUploadDialog = true">
+                <span class="material-symbols-outlined" style="font-size: 18px; margin-right: 6px;">upload</span>
+                继续上传
+              </el-button>
             </div>
-            <div class="document-actions">
-              <el-button type="primary" link @click="downloadDocument(myDocument)">下载</el-button>
-              <el-button v-if="canUploadDocument" type="warning" link @click="showUploadDialog = true">重新上传</el-button>
+            <el-table :data="myDocuments" stripe>
+              <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip />
+              <el-table-column prop="fileName" label="文件名" min-width="180" show-overflow-tooltip />
+              <el-table-column label="大小" width="100">
+                <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
+              </el-table-column>
+              <el-table-column label="上传时间" width="170">
+                <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="150" fixed="right">
+                <template #default="{ row }">
+                  <el-button type="primary" link @click="downloadDocument(row)">下载</el-button>
+                  <el-button v-if="canEditMaterial" type="danger" link @click="deleteMyDocument(row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="material-submit-actions">
+              <el-alert :type="materialConfirmed ? 'success' : 'warning'" :closable="false" :title="materialStatusText" show-icon />
+              <div class="material-buttons">
+                <el-button v-if="enrollment?.canConfirmMaterial" type="success" @click="confirmMaterialSubmission">确认提交</el-button>
+                <el-button v-if="enrollment?.canCancelMaterial" @click="cancelMaterialSubmission">取消确认</el-button>
+              </div>
             </div>
           </div>
           <div class="waiting-score">
             <span class="material-symbols-outlined">hourglass_empty</span>
-            <span>等待考核员评分中...</span>
+            <span>材料已提交，等待评分...</span>
           </div>
         </template>
 
@@ -226,7 +248,8 @@
           <el-upload
             ref="uploadRef"
             :auto-upload="false"
-            :limit="1"
+            multiple
+            :limit="10"
             :on-change="handleFileChange"
             :on-remove="handleFileRemove"
             :file-list="fileList"
@@ -253,10 +276,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getActivityById, getEnrollmentInfo } from '@/api/activity'
 import { getMaterialList, downloadMaterial as downloadMaterialApi } from '@/api/learningMaterial'
-import { getDocumentList, uploadDocument, downloadDocument as downloadDocApi } from '@/api/document'
+import { getDocumentList, uploadDocument, downloadDocument as downloadDocApi, deleteDocument as deleteDocumentApi, confirmMaterial, cancelMaterialConfirm } from '@/api/document'
 import { getMyExamRecords } from '@/api/exam'
 
 const route = useRoute()
@@ -268,7 +291,8 @@ const enrollment = ref<any>(null)
 const enrollmentInfo = ref<any>(null)
 const materials = ref<any[]>([])
 const materialsLoading = ref(false)
-const myDocument = ref<any>(null)
+const myDocuments = ref<any[]>([])
+const myDocument = computed(() => myDocuments.value[0] || null)
 const examRecord = ref<any>(null)
 
 // 上传相关
@@ -278,7 +302,7 @@ const uploadForm = ref({ title: '', description: '' })
 const uploadFormRef = ref()
 const uploadRef = ref()
 const fileList = ref<any[]>([])
-const selectedFile = ref<File | null>(null)
+const selectedFiles = ref<File[]>([])
 
 // 计算活动状态
 const activityStatus = computed(() => {
@@ -351,6 +375,18 @@ const canUploadDocument = computed(() => {
   return true
 })
 
+const materialConfirmed = computed(() => {
+  return enrollment.value?.materialStatus === 'submitted' || enrollment.value?.materialStatus === 'auto_submitted'
+})
+const canEditMaterial = computed(() => canUploadDocument.value && !materialConfirmed.value)
+const materialStatusText = computed(() => {
+  const status = enrollment.value?.materialStatus
+  if (status === 'submitted') return '材料已确认提交，评分员可开始评分'
+  if (status === 'auto_submitted') return '活动已截止，系统已自动确认提交'
+  if (myDocuments.value.length > 0) return '请确认所有材料已上传完成，确认后进入评分'
+  return '请先上传材料'
+})
+
 const examWindowPrompt = computed(() => {
   if (examWindowState.value === 'pending') return '考试尚未开始，请在考试时间内参加'
   if (examWindowState.value === 'ended') return '考试时间已结束'
@@ -400,7 +436,7 @@ const loadData = async () => {
     loadMaterials(parseInt(activityId))
 
     // 获取我的文档
-    loadMyDocument(parseInt(activityId))
+    loadMyDocuments(parseInt(activityId))
 
     // 获取我的考试记录
     const examRes = await getMyExamRecords()
@@ -431,15 +467,11 @@ const loadMaterials = async (activityId: number) => {
   }
 }
 
-const loadMyDocument = async (activityId: number) => {
+const loadMyDocuments = async (activityId: number) => {
   try {
-    const userStore = await import('@/stores/user')
-    const userId = userStore.useUserStore().user?.id
-
-    // 查询该活动下的文档
-    const res = await getDocumentList({ activityId, size: 10 })
-    if (res.code === 200 && res.data?.records?.length > 0) {
-      myDocument.value = res.data.records[0]
+    const res = await getDocumentList({ activityId, size: 50 })
+    if (res.code === 200) {
+      myDocuments.value = res.data?.records || []
     }
   } catch (e) {
     console.error('获取文档失败', e)
@@ -498,50 +530,90 @@ const downloadMaterial = async (row: any) => {
   }
 }
 
-const handleFileChange = (file: any) => {
-  selectedFile.value = file.raw
+const syncSelectedFiles = (files: any[]) => {
+  fileList.value = files
+  selectedFiles.value = files.map(file => file.raw).filter(Boolean)
 }
 
-const handleFileRemove = () => {
-  selectedFile.value = null
+const handleFileChange = (_file: any, files: any[]) => {
+  syncSelectedFiles(files)
+}
+
+const handleFileRemove = (_file: any, files: any[]) => {
+  syncSelectedFiles(files)
+}
+
+const deleteMyDocument = async (doc: any) => {
+  try {
+    await ElMessageBox.confirm('确定删除该材料吗？', '删除材料', { type: 'warning' })
+    const res = await deleteDocumentApi(doc.id)
+    if (res.code === 200) {
+      ElMessage.success('删除成功')
+      await loadMyDocuments(parseInt(route.params.id as string))
+      await loadData()
+    }
+  } catch (e: any) {
+    if (e === 'cancel' || e === 'close') return
+    ElMessage.error(e.response?.data?.message || '删除失败')
+  }
 }
 
 const handleUpload = async () => {
-  if (!selectedFile.value) {
+  if (selectedFiles.value.length === 0) {
     ElMessage.warning('请选择文件')
-    return
-  }
-  if (!uploadForm.value.title) {
-    ElMessage.warning('请输入标题')
     return
   }
 
   uploading.value = true
   try {
-    const formData = new FormData()
-    formData.append('file', selectedFile.value)
-    formData.append('activityId', route.params.id as string)
-    formData.append('title', uploadForm.value.title)
-    if (uploadForm.value.description) {
-      formData.append('description', uploadForm.value.description)
+    for (const file of selectedFiles.value) {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('activityId', route.params.id as string)
+      formData.append('title', uploadForm.value.title || file.name)
+      if (uploadForm.value.description) {
+        formData.append('description', uploadForm.value.description)
+      }
+      const res = await uploadDocument(formData)
+      if (res.code !== 200) throw new Error(res.message || '上传失败')
     }
-
-    const res = await uploadDocument(formData)
-    if (res.code === 200) {
-      ElMessage.success('上传成功')
-      showUploadDialog.value = false
-      uploadForm.value = { title: '', description: '' }
-      selectedFile.value = null
-      fileList.value = []
-      // 刷新文档列表
-      loadMyDocument(parseInt(route.params.id as string))
-    } else {
-      ElMessage.error(res.message || '上传失败')
-    }
+    ElMessage.success('上传成功')
+    showUploadDialog.value = false
+    uploadForm.value = { title: '', description: '' }
+    selectedFiles.value = []
+    fileList.value = []
+    await loadMyDocuments(parseInt(route.params.id as string))
+    await loadData()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '上传失败')
+    ElMessage.error(e.response?.data?.message || e.message || '上传失败')
   } finally {
     uploading.value = false
+  }
+}
+
+const confirmMaterialSubmission = async () => {
+  try {
+    const res = await confirmMaterial(Number(route.params.id))
+    if (res.code === 200) {
+      ElMessage.success('材料已确认提交')
+      await loadData()
+    }
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.message || '确认提交失败')
+  }
+}
+
+const cancelMaterialSubmission = async () => {
+  try {
+    await ElMessageBox.confirm('取消确认后评分员将暂时无法评分，确定继续吗？', '取消确认', { type: 'warning' })
+    const res = await cancelMaterialConfirm(Number(route.params.id))
+    if (res.code === 200) {
+      ElMessage.success('已取消确认')
+      await loadData()
+    }
+  } catch (e: any) {
+    if (e === 'cancel' || e === 'close') return
+    ElMessage.error(e.response?.data?.message || '取消确认失败')
   }
 }
 
@@ -853,5 +925,17 @@ onMounted(() => {
   font-size: 0.75rem;
   color: #999;
   margin-top: 8px;
+}
+.material-submit-actions {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.material-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
 }
 </style>

@@ -29,9 +29,20 @@ public class PeriodEnrollment {
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
     private Status status = Status.enrolled;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "material_status", length = 20)
+    private MaterialStatus materialStatus = MaterialStatus.draft;
+
+    @Column(name = "material_submitted_at")
+    private LocalDateTime materialSubmittedAt;
     
     public enum Status {
         enrolled, removed
+    }
+
+    public enum MaterialStatus {
+        draft, submitted, auto_submitted
     }
     
     @PrePersist
@@ -41,3 +52,4 @@ public class PeriodEnrollment {
         }
     }
 }
+

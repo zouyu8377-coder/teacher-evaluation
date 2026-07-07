@@ -42,20 +42,24 @@
           </template>
         </el-alert>
 
-        <el-descriptions :column="2" border class="mb-3">
-          <el-descriptions-item label="文档标题">{{ document?.title || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="文件名">{{ document?.fileName || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="上传时间">{{ document?.createdAt || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="文件大小">{{ formatFileSize(document?.fileSize) }}</el-descriptions-item>
-        </el-descriptions>
+        <el-table v-if="documents.length > 0" :data="documents" stripe class="mb-3">
+          <el-table-column prop="title" label="材料名称" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="fileName" label="文件名" min-width="180" show-overflow-tooltip />
+          <el-table-column label="大小" width="100">
+            <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
+          </el-table-column>
+          <el-table-column prop="createdAt" label="上传时间" width="180" />
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }">
+              <el-button type="primary" link @click="downloadDocument(row)">下载</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
 
-        <el-button type="primary" @click="downloadDocument" v-if="document">
-          下载文档
+        <el-button type="primary" link @click="viewDocument" v-if="documents.length > 0">
+          查看全部材料
         </el-button>
-        <el-button type="primary" link @click="viewDocument" v-if="document">
-          在线预览
-        </el-button>
-        <span v-if="!document" class="text-muted">教师尚未上传文档</span>
+        <span v-if="documents.length === 0" class="text-muted">教师尚未上传文档</span>
       </div>
 
       <!-- C级考核无需评分表单 -->
@@ -141,7 +145,8 @@ const activities = ref<any[]>([])
 const historyData = ref<any[]>([])
 const currentActivity = ref<any>(null)
 const examRecord = ref<any>(null)
-const document = ref<any>(null)
+const documents = ref<any[]>([])
+const document = computed(() => documents.value[0] || null)
 const scoresPublished = ref(false)
 
 const currentActivityId = computed(() => form.activityId || activityId.value)
@@ -177,9 +182,9 @@ const loadDocument = async () => {
   if (!currentActivityId.value) return
   const res = await getTeacherDocuments(teacherId.value, currentActivityId.value)
   if (res.code === 200 && res.data.records.length > 0) {
-    document.value = res.data.records[0]
+    documents.value = res.data.records
   } else {
-    document.value = null
+    documents.value = []
   }
 }
 
@@ -193,14 +198,15 @@ const viewDocument = () => {
   }
 }
 
-const downloadDocument = async () => {
-  if (!document.value?.id) return
+const downloadDocument = async (row: any) => {
+  if (!row?.id) return
   try {
-    const res = await downloadDocumentApi(document.value.id)
-    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const res = await downloadDocumentApi(row.id)
+    const blob = res instanceof Blob ? res : new Blob([res as any])
+    const url = window.URL.createObjectURL(blob)
     const link = window.document.createElement('a')
     link.href = url
-    link.download = document.value.fileName || 'document'
+    link.download = row.fileName || 'document'
     window.document.body.appendChild(link)
     link.click()
     window.document.body.removeChild(link)

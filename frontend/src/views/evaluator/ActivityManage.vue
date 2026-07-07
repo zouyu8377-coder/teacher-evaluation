@@ -109,7 +109,7 @@
         <div class="actions" v-if="selectedActivity">
           <el-tag v-if="selectedActivity.scoresPublished" type="success">成绩已公布</el-tag>
           <span v-else style="color: #999;">
-            {{ reviewStatus === '待评分' || reviewStatus === '未配置' ? '评分尚未开始' : reviewStatus === '评分中' ? '等待所有评分人完成评分' : '等待管理员发布成绩' }}
+            {{ getReviewStatusText(reviewStatus) }}
           </span>
         </div>
       </template>
@@ -215,6 +215,17 @@ const selectedDocumentTeacher = ref<any>(null)
 const teacherDocuments = ref<any[]>([])
 const examDetailRecord = ref<any>(null)
 const reviewStatus = ref<string>('')
+
+const getReviewStatusText = (status: string) => {
+  const map: Record<string, string> = {
+    not_configured: '评分尚未开始',
+    pending: '评分尚未开始',
+    in_progress: '等待所有评分人完成评分',
+    complete: '等待管理员发布成绩',
+    published: '成绩已发布'
+  }
+  return map[status] || '等待管理员发布成绩'
+}
 const examDetailQuestions = ref<any[]>([])
 
 const filteredActivities = computed(() => {

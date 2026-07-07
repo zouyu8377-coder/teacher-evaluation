@@ -33,9 +33,14 @@
                 发布成绩
               </el-button>
             </template>
-            <template v-else>
+            <template v-else-if="activity.scoresPublished">
               <el-tag type="success" size="small" style="margin-left: 12px;">
-                成绩已发布，通过分数线 {{ activity.passingScore }} 分
+                成绩已发布，通过分数线 {{ activity.passingScore ?? '-' }} 分
+              </el-tag>
+            </template>
+            <template v-else>
+              <el-tag type="info" size="small" style="margin-left: 12px;">
+                等待评分完成后发布成绩
               </el-tag>
             </template>
           </div>
@@ -145,10 +150,10 @@
           </div>
           <el-divider />
           <div class="review-status">
-            <el-tag v-if="reviewProgress.reviewStatus === '未配置'" type="info">待配置评分人</el-tag>
-            <el-tag v-else-if="reviewProgress.reviewStatus === '待评分'" type="warning">待评分</el-tag>
-            <el-tag v-else-if="reviewProgress.reviewStatus === '评分中'" type="warning">评分中</el-tag>
-            <el-tag v-else-if="reviewProgress.reviewStatus === '评分完成' && !reviewProgress.scoresPublished" type="success">评分完成</el-tag>
+            <el-tag v-if="reviewProgress.reviewStatus === 'not_configured'" type="info">待配置评分人</el-tag>
+            <el-tag v-else-if="reviewProgress.reviewStatus === 'pending'" type="warning">待评分</el-tag>
+            <el-tag v-else-if="reviewProgress.reviewStatus === 'in_progress'" type="warning">评分中</el-tag>
+            <el-tag v-else-if="reviewProgress.reviewStatus === 'complete' && !reviewProgress.scoresPublished" type="success">评分完成</el-tag>
             <el-tag v-else-if="reviewProgress.scoresPublished" type="success">成绩已发布</el-tag>
           </div>
           <!-- 评分完成且成绩未发布时显示发布按钮 -->
@@ -257,6 +262,12 @@
                 </div>
                 <span v-else class="text-muted">-</span>
               </template>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="activity.scoresPublished" label="最终得分" width="120">
+            <template #default="{ row }">
+              <el-tag v-if="row.finalScore !== undefined && row.finalScore !== null" :type="row.isPassed ? 'success' : 'danger'">{{ row.finalScore }} 分</el-tag>
+              <span v-else class="text-muted">-</span>
             </template>
           </el-table-column>
           <el-table-column :label="activity.level === 'C' ? '考试结果' : '评分进度'" width="120">
@@ -369,6 +380,16 @@
           <el-input-number v-model="editForm.maxParticipants" :min="0" :max="10000" placeholder="0表示不限制" />
           <span style="margin-left: 10px; color: #999;">0表示不限制</span>
         </el-form-item>
+        <el-form-item label="通过分数线">
+          <el-input-number
+            v-model="editForm.passingScore"
+            :min="0"
+            :max="100"
+            :precision="1"
+            :disabled="activity?.scoresPublished"
+          />
+          <span style="margin-left: 10px; color: #999;">公布成绩前可调整</span>
+        </el-form-item>
         <el-form-item label="考核地点">
           <el-input v-model="editForm.location" placeholder="非必填" />
         </el-form-item>
@@ -430,14 +451,7 @@ const canPublish = computed(() => {
     // 未设置考试时间时，根据 timeStatus 判断
     return activity.value.timeStatus === 'ended'
   }
-  const materialEnd = activity.value.materialEnd || activity.value.enrollmentEnd
-  if (materialEnd) {
-    const endTime = new Date(materialEnd)
-    if (!isNaN(endTime.getTime()) && new Date() < endTime) {
-      return false
-    }
-  }
-  return reviewProgress.value.reviewStatus === '评分完成'
+  return reviewProgress.value.reviewStatus === 'complete'
 })
 
 // 根据 reviewerIds 获取已选评分人名字
@@ -486,6 +500,7 @@ const editForm = ref({
   name: '',
   level: '' as Activity['level'],
   maxParticipants: 0,
+  passingScore: 60,
   selectedReviewers: [] as number[],
   enrollmentStart: '',
   enrollmentEnd: '',
@@ -529,7 +544,7 @@ const reviewProgress = ref<any>({
   reviewerStats: [],
   totalCompleted: 0,
   totalRequired: 0,
-  reviewStatus: '未开始',
+  reviewStatus: 'pending',
   scoresPublished: false
 })
 
@@ -553,7 +568,7 @@ const handlePublishScores = async () => {
       cancelButtonText: '取消',
       inputPattern: /^\d+(\.\d{1,2})?$/,
       inputErrorMessage: '请输入有效的分数（如 60 或 60.5）',
-      inputValue: '60'
+      inputValue: String(activity.value.passingScore ?? 60)
     })
     const passingScore = parseFloat(value)
     if (isNaN(passingScore) || passingScore < 0 || passingScore > 100) {
@@ -664,6 +679,7 @@ const openEditDialog = () => {
     name: activity.value.name,
     level: activity.value.level,
     maxParticipants: activity.value.maxParticipants || 0,
+    passingScore: activity.value.passingScore ?? 60,
     selectedReviewers: safeParseReviewerIds(activity.value.reviewerIds),
     enrollmentStart: activity.value.enrollmentStart,
     enrollmentEnd: activity.value.enrollmentEnd,

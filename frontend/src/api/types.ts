@@ -45,6 +45,7 @@ export interface Activity {
   reviewerIds: string
   examPaperId?: number
   hasExam: boolean
+  passingScore?: number | null
   examDurationMinutes: number
   createdAt: string
 }
@@ -68,6 +69,10 @@ export interface MyEnrollmentVO {
   examStatus: string | null
   examSubmittedAt: string | null
   documentId: number | null
+  materialStatus?: string | null
+  materialSubmittedAt?: string | null
+  canConfirmMaterial?: boolean
+  canCancelMaterial?: boolean
   scorePublished: boolean
   finalScore: number | null
   isPassed: boolean | null
@@ -87,6 +92,11 @@ export interface EnrollmentTeacherVO {
   examRecordId: number | null
   submittedAt: string | null
   submissionStatus: string
+  materialStatus?: string | null
+  examScore?: number | null
+  finalScore?: number | null
+  isPassed?: boolean | null
+  evaluations?: EvaluationVO[]
 }
 
 // 报名信息 VO（对应后端 EnrollmentInfoVO）
@@ -114,6 +124,10 @@ export interface EnrollmentInfoVO {
   documentFileName: string | null
   documentFileSize: number | null
   documentCreatedAt: string | null
+  materialStatus?: string | null
+  materialSubmittedAt?: string | null
+  canConfirmMaterial?: boolean
+  canCancelMaterial?: boolean
   scorePublished: boolean
   finalScore: number | null
   isPassed: boolean | null

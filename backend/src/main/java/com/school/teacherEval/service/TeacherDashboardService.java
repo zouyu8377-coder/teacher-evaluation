@@ -92,10 +92,18 @@ public class TeacherDashboardService {
         levelInfo.setLevelName(teacherLevel.getDisplayName());
         levelInfo.setHasPassed(true);
         levelInfo.setPassedAt(user.getLevelChangedAt());
+        evaluationRepository.findByTeacherIdAndIsPublished(teacherId).stream()
+                .filter(e -> Boolean.TRUE.equals(e.getIsPassed()))
+                .filter(e -> e.getFinalScore() != null)
+                .filter(e -> {
+                    Activity activity = activityRepository.findById(e.getActivityId()).orElse(null);
+                    return activity != null && teacherLevel == com.school.teacherEval.entity.TeacherLevel.fromActivityLevel(activity.getLevel());
+                })
+                .max(java.util.Comparator.comparing(Evaluation::getUpdatedAt, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+                .ifPresent(e -> levelInfo.setFinalScore(e.getFinalScore()));
 
         // 计算下一级
-        Activity.Level currentActivityLevel = Activity.Level.valueOf(teacherLevel.name());
-        List<Activity.Level> nextLevels = Activity.Level.getNextLevels(currentActivityLevel);
+        List<Activity.Level> nextLevels = getNextActivityLevels(teacherLevel);
         if (!nextLevels.isEmpty()) {
             String nextLevelNames = nextLevels.stream()
                     .map(Activity.Level::name)
@@ -108,6 +116,18 @@ public class TeacherDashboardService {
         }
 
         return levelInfo;
+    }
+
+    private List<Activity.Level> getNextActivityLevels(com.school.teacherEval.entity.TeacherLevel teacherLevel) {
+        if (teacherLevel == null) {
+            return List.of(Activity.Level.C);
+        }
+        return switch (teacherLevel) {
+            case NONE -> List.of(Activity.Level.C);
+            case C -> List.of(Activity.Level.B2, Activity.Level.B1);
+            case B -> List.of(Activity.Level.A2, Activity.Level.A1);
+            case A -> List.of();
+        };
     }
 
     /**

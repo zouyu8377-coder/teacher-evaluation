@@ -12,7 +12,7 @@ RUN apk add --no-cache tzdata && \
 WORKDIR /app
 
 # 直接复制宿主机已编译的jar
-COPY target/teacher-evaluation-*.jar app.jar
+COPY target/teacher-evaluation-1.4.2.jar app.jar
 
 EXPOSE 8080
 

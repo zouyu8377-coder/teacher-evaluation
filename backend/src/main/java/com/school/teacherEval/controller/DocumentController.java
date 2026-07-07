@@ -2,6 +2,7 @@ package com.school.teacherEval.controller;
 
 import com.school.teacherEval.dto.ApiResponse;
 import com.school.teacherEval.entity.Document;
+import com.school.teacherEval.entity.PeriodEnrollment;
 import com.school.teacherEval.entity.User;
 import com.school.teacherEval.service.DocumentService;
 import com.school.teacherEval.service.UserService;
@@ -112,6 +113,22 @@ public class DocumentController {
         return ApiResponse.success("删除成功", null);
     }
     
+    @PostMapping("/activity/{activityId}/confirm")
+    @Operation(summary = "确认活动材料提交")
+    @PreAuthorize("hasRole('teacher')")
+    public ApiResponse<PeriodEnrollment> confirmMaterial(@PathVariable Long activityId) {
+        User currentUser = getCurrentUser();
+        return ApiResponse.success(documentService.confirmMaterialSubmission(activityId, currentUser.getId()));
+    }
+
+    @PostMapping("/activity/{activityId}/cancel-confirm")
+    @Operation(summary = "取消活动材料确认")
+    @PreAuthorize("hasRole('teacher')")
+    public ApiResponse<PeriodEnrollment> cancelMaterialConfirm(@PathVariable Long activityId) {
+        User currentUser = getCurrentUser();
+        return ApiResponse.success(documentService.cancelMaterialSubmission(activityId, currentUser.getId()));
+    }
+
     @GetMapping("/{id}/download")
     @Operation(summary = "下载文档")
     public void downloadDocument(@PathVariable Long id, HttpServletResponse response) throws Exception {

@@ -66,6 +66,7 @@
           <p class="user-name">{{ userStore.user?.realName || userStore.user?.username }}</p>
           <p class="user-role">{{ roleText }}</p>
         </div>
+      <div class="app-version">v{{ appVersion }}</div>
       </div>
     </div>
   </aside>
@@ -76,9 +77,12 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
+declare const __APP_VERSION__: string
+
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const appVersion = __APP_VERSION__ || '1.4.2'
 
 // 检查当前路由是否匹配菜单项
 const isActive = (path: string) => {
@@ -274,5 +278,12 @@ const userAvatar = computed(() => {
   font-size: 0.6875rem;
   color: #94a3b8;
   margin: 0;
+}
+
+.app-version {
+  margin-top: 10px;
+  font-size: 0.6875rem;
+  color: #94a3b8;
+  text-align: right;
 }
 </style>

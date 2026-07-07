@@ -40,6 +40,7 @@ public class EvaluationService {
     private final EnrollmentRepository enrollmentRepository;
     private final ExamRecordService examRecordService;
     private final DocumentRepository documentRepository;
+    private final DocumentService documentService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -132,7 +133,7 @@ public class EvaluationService {
     public int publishScores(Long activityId, Long teacherId, BigDecimal passingScore) {
         Activity activity = activityService.getById(activityId);
 
-        validatePublishTiming(activity);
+        validatePublishTiming(activity, teacherId);
         validateNotDuplicatePublish(activity, teacherId);
 
         if (passingScore == null) {
@@ -172,20 +173,55 @@ public class EvaluationService {
         return count;
     }
 
-    private void validatePublishTiming(Activity activity) {
+    private void validatePublishTiming(Activity activity, Long teacherId) {
         LocalDateTime now = LocalDateTime.now();
         if (activity.getLevel() == Activity.Level.C) {
             if (activity.getExamEnd() != null && now.isBefore(activity.getExamEnd())) {
-                throw new BusinessException("考试时间尚未结束，无法公布成绩");
+                throw new BusinessException("???????????????");
             }
             return;
         }
         LocalDateTime materialEnd = activity.getMaterialEnd() != null
                 ? activity.getMaterialEnd()
                 : activity.getEnrollmentEnd();
-        if (materialEnd != null && now.isBefore(materialEnd)) {
-            throw new BusinessException("材料提交时间尚未结束，无法公布成绩");
+        if (materialEnd != null && now.isBefore(materialEnd) && !isNonCReviewComplete(activity, teacherId)) {
+            throw new BusinessException("?????????????????????????");
         }
+    }
+
+    private boolean isNonCReviewComplete(Activity activity, Long targetTeacherId) {
+        int requiredReviewers = activity.getReviewerCount() != null ? activity.getReviewerCount() : 0;
+        if (requiredReviewers <= 0) {
+            return false;
+        }
+
+        List<PeriodEnrollment> enrollments = enrollmentRepository.findByActivityId(activity.getId()).stream()
+                .filter(e -> e.getStatus() == PeriodEnrollment.Status.enrolled)
+                .filter(e -> targetTeacherId == null || targetTeacherId.equals(e.getTeacherId()))
+                .toList();
+        if (enrollments.isEmpty()) {
+            return false;
+        }
+
+        List<Long> reviewerIds = parseReviewerIds(activity.getReviewerIds());
+        List<Evaluation> evaluations = evaluationRepository.findByActivityId(activity.getId()).stream()
+                .filter(e -> e.getScore() != null)
+                .filter(e -> e.getStatus() == Evaluation.Status.submitted)
+                .filter(e -> !SYSTEM_EVALUATOR_ID.equals(e.getEvaluatorId()))
+                .filter(e -> reviewerIds.isEmpty() || reviewerIds.contains(e.getEvaluatorId()))
+                .toList();
+
+        for (PeriodEnrollment enrollment : enrollments) {
+            long completed = evaluations.stream()
+                    .filter(e -> enrollment.getTeacherId().equals(e.getTeacherId()))
+                    .map(Evaluation::getEvaluatorId)
+                    .distinct()
+                    .count();
+            if (completed < requiredReviewers) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void validateNotDuplicatePublish(Activity activity, Long teacherId) {
@@ -239,6 +275,10 @@ public class EvaluationService {
                 publishMissingDocumentAsFailed(activity, teacherId);
                 count++;
                 continue;
+            }
+            enrollment = documentService.autoConfirmIfExpired(activity, enrollment);
+            if (!documentService.isMaterialReviewable(activity, enrollment, true)) {
+                throw new BusinessException("教师 " + teacherId + " 尚未确认材料提交，无法发布成绩");
             }
 
             List<Evaluation> teacherEvals = byTeacher.getOrDefault(teacherId, List.of()).stream()

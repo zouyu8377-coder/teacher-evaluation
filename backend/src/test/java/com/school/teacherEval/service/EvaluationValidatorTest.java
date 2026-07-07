@@ -4,9 +4,11 @@ import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Document;
 import com.school.teacherEval.entity.Evaluation;
 import com.school.teacherEval.entity.ExamRecord;
+import com.school.teacherEval.entity.PeriodEnrollment;
 import com.school.teacherEval.entity.User;
 import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.DocumentRepository;
+import com.school.teacherEval.repository.EnrollmentRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
 import com.school.teacherEval.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +25,9 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class EvaluationValidatorTest {
@@ -35,6 +40,10 @@ class EvaluationValidatorTest {
     private ExamRecordService examRecordService;
     @Mock
     private DocumentRepository documentRepository;
+    @Mock
+    private EnrollmentRepository enrollmentRepository;
+    @Mock
+    private DocumentService documentService;
     @Mock
     private EvaluationRepository evaluationRepository;
 
@@ -55,6 +64,17 @@ class EvaluationValidatorTest {
         nonCActivity.setId(2L);
         nonCActivity.setLevel(Activity.Level.B1);
         nonCActivity.setReviewerIds("[10]");
+
+        PeriodEnrollment enrollment = new PeriodEnrollment();
+        enrollment.setActivityId(2L);
+        enrollment.setTeacherId(20L);
+        enrollment.setStatus(PeriodEnrollment.Status.enrolled);
+        enrollment.setMaterialStatus(PeriodEnrollment.MaterialStatus.submitted);
+        lenient().when(enrollmentRepository.findByActivityIdAndTeacherId(2L, 20L)).thenReturn(Optional.of(enrollment));
+        lenient().when(documentService.autoConfirmIfExpired(any(Activity.class), any(PeriodEnrollment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(1));
+        lenient().when(documentService.isMaterialReviewable(any(Activity.class), any(PeriodEnrollment.class), eq(true)))
+                .thenReturn(true);
     }
 
     @Test

@@ -1,6 +1,6 @@
 # 教师评价考核平台
 
-[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/zouyu8377-coder/teacher-evaluation)
+[![Version](https://img.shields.io/badge/version-1.4.2-blue.svg)](https://github.com/zouyu8377-coder/teacher-evaluation)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 面向中小学教师职称/级别晋升的在线考核评价系统，支持在线考试、材料提交、多维度评分、等级自动晋升等功能。
@@ -197,7 +197,7 @@ teacher-evaluation/
 
 | 版本 | 日期 | 主要变更 |
 |------|------|---------|
-| v1.4.0 | 2026-06-07 | 统一考核状态机，收紧权限边界，生产初始化治理，前端类型检查与依赖安全更新 |
+| v1.4.2 | 2026-06-07 | 统一考核状态机，收紧权限边界，生产初始化治理，前端类型检查与依赖安全更新 |
 | v1.3.0 | 2026-05-06 | 引入教师等级体系：持久化等级、自动晋升、历史记录、管理端等级修改 |
 | v1.2.x | 2026-05 | 考核功能完善、成绩发布优化、C级考试修复 |
 | v1.1.7 | 2026-04 | 前后端类型安全重构 |

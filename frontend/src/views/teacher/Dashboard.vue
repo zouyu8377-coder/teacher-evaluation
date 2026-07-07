@@ -67,6 +67,10 @@
                 <span>通过时间</span>
                 <strong>{{ formatDate(dashboard.currentLevel.passedAt) }}</strong>
               </div>
+              <div v-if="dashboard?.currentLevel?.finalScore !== null && dashboard?.currentLevel?.finalScore !== undefined" class="pass-date">
+                <span>最终得分</span>
+                <strong>{{ dashboard.currentLevel.finalScore }} 分</strong>
+              </div>
               <div v-if="dashboard?.currentLevel?.canEnrollNext" class="next-level-hint">
                 <span class="material-symbols-outlined">arrow_forward</span>
                 可报考: {{ dashboard?.currentLevel?.nextLevel }}级

@@ -22,7 +22,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 AND d.userId = :userId AND d.activityId = :activityId ORDER BY d.createdAt DESC")
     Page<Document> findByUserIdAndActivityId(@Param("userId") Long userId, @Param("activityId") Long activityId, Pageable pageable);
 
-    @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 AND d.userId = :userId AND d.activityId = :activityId ORDER BY d.createdAt DESC")
+    @Query(value = "SELECT * FROM documents d WHERE d.is_deleted = 0 AND d.user_id = :userId AND d.activity_id = :activityId ORDER BY d.created_at DESC LIMIT 1", nativeQuery = true)
     Optional<Document> findFirstByActivityIdAndUserId(@Param("activityId") Long activityId, @Param("userId") Long userId);
     
     @Query("SELECT d FROM Document d WHERE d.isDeleted = 0 ORDER BY d.createdAt DESC")

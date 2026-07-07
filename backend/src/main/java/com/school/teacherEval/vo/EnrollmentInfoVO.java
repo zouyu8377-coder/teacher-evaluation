@@ -36,6 +36,10 @@ public class EnrollmentInfoVO {
     private String documentFileName;
     private Long documentFileSize;
     private LocalDateTime documentCreatedAt;
+    private String materialStatus;
+    private LocalDateTime materialSubmittedAt;
+    private Boolean canConfirmMaterial;
+    private Boolean canCancelMaterial;
     private Boolean scorePublished;
     private BigDecimal finalScore;
     private Boolean isPassed;

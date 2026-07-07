@@ -27,6 +27,14 @@ export const deleteDocument = (id: number) => {
   return api.delete('/documents/' + id) as Promise<ApiResponse<void>>
 }
 
+export const confirmMaterial = (activityId: number) => {
+  return api.post('/documents/activity/' + activityId + '/confirm') as Promise<ApiResponse<any>>
+}
+
+export const cancelMaterialConfirm = (activityId: number) => {
+  return api.post('/documents/activity/' + activityId + '/cancel-confirm') as Promise<ApiResponse<any>>
+}
+
 export const downloadDocument = (id: number) => {
   return api.get('/documents/' + id + '/download', {
     responseType: 'blob'

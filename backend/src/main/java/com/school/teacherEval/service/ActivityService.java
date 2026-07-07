@@ -99,6 +99,12 @@ public class ActivityService {
         if (updated.getMaterialEnd() != null) activity.setMaterialEnd(updated.getMaterialEnd());
         if (updated.getStartDate() != null) activity.setStartDate(updated.getStartDate());
         if (updated.getEndDate() != null) activity.setEndDate(updated.getEndDate());
+        if (updated.getPassingScore() != null) {
+            if (Boolean.TRUE.equals(activity.getScoresPublished())) {
+                throw new BusinessException("成绩已发布，不能修改通过分数线");
+            }
+            activity.setPassingScore(updated.getPassingScore());
+        }
 
         prepareActivityForLevel(activity);
 

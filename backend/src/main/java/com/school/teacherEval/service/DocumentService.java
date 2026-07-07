@@ -4,9 +4,12 @@ import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.config.MinioConfig;
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Document;
+import com.school.teacherEval.entity.PeriodEnrollment;
 import com.school.teacherEval.entity.User;
 import com.school.teacherEval.repository.ActivityRepository;
 import com.school.teacherEval.repository.DocumentRepository;
+import com.school.teacherEval.repository.EnrollmentRepository;
+import com.school.teacherEval.repository.EvaluationRepository;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
@@ -52,6 +55,8 @@ public class DocumentService {
     private final MinioConfig minioConfig;
     private final EnrollmentService enrollmentService;
     private final ActivityRepository activityRepository;
+    private final EnrollmentRepository enrollmentRepository;
+    private final EvaluationRepository evaluationRepository;
     
     public Page<Document> getDocuments(Long userId, Long activityId, int page, int size) {
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -96,6 +101,7 @@ public class DocumentService {
             throw new BusinessException("考试类活动无需上传文档");
         }
         assertMaterialMutationOpen(activity);
+        assertMaterialDraft(activityId, userId);
 
         // 文件大小校验
         if (file.getSize() > MAX_FILE_SIZE) {
@@ -169,6 +175,7 @@ public class DocumentService {
         Activity activity = activityRepository.findById(document.getActivityId())
                 .orElseThrow(() -> new BusinessException("活动不存在"));
         assertMaterialMutationOpen(activity);
+        assertMaterialDraft(document.getActivityId(), userId);
         
         if (title != null) {
             document.setTitle(title);
@@ -191,6 +198,7 @@ public class DocumentService {
             Activity activity = activityRepository.findById(document.getActivityId())
                     .orElseThrow(() -> new BusinessException("活动不存在"));
             assertMaterialMutationOpen(activity);
+            assertMaterialDraft(document.getActivityId(), userId);
         }
         
         document.setIsDeleted(1);
@@ -235,6 +243,95 @@ public class DocumentService {
                 .getContent()
                 .stream()
                 .findFirst();
+    }
+
+    @Transactional
+    public PeriodEnrollment confirmMaterialSubmission(Long activityId, Long userId) {
+        PeriodEnrollment enrollment = getActiveEnrollment(activityId, userId);
+        Activity activity = activityRepository.findById(activityId)
+                .orElseThrow(() -> new BusinessException("活动不存在"));
+        if (activity.getLevel() == Activity.Level.C || Boolean.TRUE.equals(activity.getHasExam())) {
+            throw new BusinessException("考试类活动不需要确认材料");
+        }
+        if (documentRepository.findFirstByActivityIdAndUserId(activityId, userId).isEmpty()) {
+            throw new BusinessException("请先上传至少一份材料");
+        }
+        enrollment.setMaterialStatus(PeriodEnrollment.MaterialStatus.submitted);
+        enrollment.setMaterialSubmittedAt(LocalDateTime.now());
+        return enrollmentRepository.save(enrollment);
+    }
+
+    @Transactional
+    public PeriodEnrollment cancelMaterialSubmission(Long activityId, Long userId) {
+        PeriodEnrollment enrollment = getActiveEnrollment(activityId, userId);
+        Activity activity = activityRepository.findById(activityId)
+                .orElseThrow(() -> new BusinessException("活动不存在"));
+        LocalDateTime end = getMaterialEnd(activity);
+        if (end != null && LocalDateTime.now().isAfter(end)) {
+            throw new BusinessException("活动已截止，无法取消确认");
+        }
+        boolean hasEvaluation = evaluationRepository.findByActivityIdAndTeacherId(activityId, userId).stream()
+                .anyMatch(e -> e.getScore() != null);
+        if (hasEvaluation) {
+            throw new BusinessException("评分员已评分，无法取消确认");
+        }
+        enrollment.setMaterialStatus(PeriodEnrollment.MaterialStatus.draft);
+        enrollment.setMaterialSubmittedAt(null);
+        return enrollmentRepository.save(enrollment);
+    }
+
+    public boolean isMaterialReviewable(Activity activity, PeriodEnrollment enrollment, boolean hasDocument) {
+        if (activity == null || enrollment == null || !hasDocument) {
+            return false;
+        }
+        PeriodEnrollment.MaterialStatus status = enrollment.getMaterialStatus();
+        if (status == PeriodEnrollment.MaterialStatus.submitted || status == PeriodEnrollment.MaterialStatus.auto_submitted) {
+            return true;
+        }
+        LocalDateTime end = getMaterialEnd(activity);
+        return end != null && !LocalDateTime.now().isBefore(end);
+    }
+
+    @Transactional
+    public PeriodEnrollment autoConfirmIfExpired(Activity activity, PeriodEnrollment enrollment) {
+        if (activity == null || enrollment == null) {
+            return enrollment;
+        }
+        boolean hasDocument = documentRepository.findFirstByActivityIdAndUserId(activity.getId(), enrollment.getTeacherId()).isPresent();
+        if (!hasDocument || !isMaterialReviewable(activity, enrollment, true)) {
+            return enrollment;
+        }
+        PeriodEnrollment.MaterialStatus status = enrollment.getMaterialStatus();
+        if (status == PeriodEnrollment.MaterialStatus.submitted || status == PeriodEnrollment.MaterialStatus.auto_submitted) {
+            return enrollment;
+        }
+        enrollment.setMaterialStatus(PeriodEnrollment.MaterialStatus.auto_submitted);
+        enrollment.setMaterialSubmittedAt(LocalDateTime.now());
+        return enrollmentRepository.save(enrollment);
+    }
+
+    public LocalDateTime getMaterialEnd(Activity activity) {
+        if (activity == null) {
+            return null;
+        }
+        return activity.getMaterialEnd() != null ? activity.getMaterialEnd() : activity.getEnrollmentEnd();
+    }
+
+    private PeriodEnrollment getActiveEnrollment(Long activityId, Long userId) {
+        PeriodEnrollment enrollment = enrollmentRepository.findByActivityIdAndTeacherId(activityId, userId)
+                .orElseThrow(() -> new BusinessException("未找到报名记录"));
+        if (enrollment.getStatus() != PeriodEnrollment.Status.enrolled) {
+            throw new BusinessException("报名记录已失效");
+        }
+        return enrollment;
+    }
+
+    private void assertMaterialDraft(Long activityId, Long userId) {
+        PeriodEnrollment enrollment = getActiveEnrollment(activityId, userId);
+        PeriodEnrollment.MaterialStatus status = enrollment.getMaterialStatus();
+        if (status == PeriodEnrollment.MaterialStatus.submitted || status == PeriodEnrollment.MaterialStatus.auto_submitted) {
+            throw new BusinessException("材料已确认提交，如需修改请先取消确认");
+        }
     }
 
     private void assertMaterialMutationOpen(Activity activity) {

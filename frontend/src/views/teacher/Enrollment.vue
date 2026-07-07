@@ -81,24 +81,18 @@
 
               <!-- 非C级：显示文档上传状态 -->
               <div v-else class="card-action">
-                <template v-if="!item.documentId">
-                  <template v-if="isMaterialWindowOpen(item)">
-                    <el-button type="primary" @click.stop="goToUpload(item)">上传文档</el-button>
-                  </template>
-                  <template v-else>
-                    <el-button type="info" disabled>未开放</el-button>
-                  </template>
-                </template>
-                <template v-else-if="!item.scorePublished">
-                  <el-button type="info" disabled>已上传，等待评分</el-button>
-                </template>
-                <template v-else>
+                <template v-if="item.scorePublished">
                   <div class="score-display">
                     <span class="score-label">得分</span>
                     <span class="score-value" :class="getScoreClass(item.finalScore, item.isPassed)">
                       {{ item.finalScore }}
                     </span>
                   </div>
+                </template>
+                <template v-else>
+                  <el-tag :type="getMaterialActionTagType(item)" size="large">
+                    {{ getMaterialActionText(item) }}
+                  </el-tag>
                 </template>
               </div>
             </div>
@@ -324,6 +318,23 @@ const isMaterialWindowOpen = (item: any) => {
   return true
 }
 
+const getMaterialActionText = (item: any) => {
+  const status = item.businessStatus || getActivityStatus(item)
+  if (status === 'material_pending') return '未开始'
+  if (status === 'material_missed') return item.documentId ? '已结束，等待评分' : '已结束'
+  if (status === 'material_submitted_wait_review' || item.documentId) return '进行中，已提交'
+  if (isMaterialWindowOpen(item)) return '进行中'
+  return '未开放'
+}
+
+const getMaterialActionTagType = (item: any) => {
+  const text = getMaterialActionText(item)
+  if (text.startsWith('进行中')) return 'success'
+  if (text.startsWith('已结束')) return 'info'
+  if (text === '未开始') return 'warning'
+  return 'info'
+}
+
 const loadAvailableActivities = async () => {
   const activities = await activityStore.loadAvailableActivities()
   const now = new Date()
@@ -382,10 +393,6 @@ const handleEnroll = async (row: any) => {
     const msg = e.response?.data?.message || '报名失败'
     ElMessage.error(msg)
   }
-}
-
-const goToUpload = (row: any) => {
-  router.push({ path: '/teacher/upload', query: { activityId: row.activityId } })
 }
 
 const goToExam = (row: any) => {

@@ -41,6 +41,7 @@ public class TeacherDashboardDTO {
         private String levelName;
         private Boolean hasPassed;
         private LocalDateTime passedAt;
+        private BigDecimal finalScore;
         private String nextLevel;
         private Boolean canEnrollNext;
     }
