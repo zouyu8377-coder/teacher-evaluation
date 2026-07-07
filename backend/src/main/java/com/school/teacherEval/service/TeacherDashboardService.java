@@ -35,6 +35,8 @@ public class TeacherDashboardService {
     private final ExamRecordRepository examRecordRepository;
     private final DocumentRepository documentRepository;
     private final AssessmentStatusService assessmentStatusService;
+    private final EnrollmentEligibilityService enrollmentEligibilityService;
+    private final ActivityService activityService;
 
     public TeacherDashboardDTO getDashboard(Long teacherId) {
         TeacherDashboardDTO dto = new TeacherDashboardDTO();
@@ -111,7 +113,7 @@ public class TeacherDashboardService {
             levelInfo.setNextLevel(nextLevelNames);
             levelInfo.setCanEnrollNext(true);
         } else {
-            levelInfo.setNextLevel("A1");
+            levelInfo.setNextLevel(null);
             levelInfo.setCanEnrollNext(false);
         }
 
@@ -144,6 +146,13 @@ public class TeacherDashboardService {
                 .map(e -> {
                     Activity activity = activityRepository.findById(e.getActivityId()).orElse(null);
                     if (activity == null) return null;
+
+                    Optional<Evaluation> evalOpt = publishedEvals.stream()
+                            .filter(ev -> ev.getActivityId().equals(activity.getId()))
+                            .findFirst();
+                    if (!isCurrentEnrollmentVisible(teacherId, activity, evalOpt)) {
+                        return null;
+                    }
 
                     TeacherDashboardDTO.EnrollmentInfo info = new TeacherDashboardDTO.EnrollmentInfo();
                     info.setEnrollmentId(e.getId());
@@ -185,9 +194,6 @@ public class TeacherDashboardService {
                     }
 
                     // 检查评分状态
-                    Optional<Evaluation> evalOpt = publishedEvals.stream()
-                            .filter(ev -> ev.getActivityId().equals(activity.getId()))
-                            .findFirst();
                     if (evalOpt.isPresent()) {
                         Evaluation eval = evalOpt.get();
                         info.setScorePublished(true);
@@ -311,9 +317,15 @@ public class TeacherDashboardService {
 
             Activity activity = activityRepository.findById(enrollment.getActivityId()).orElse(null);
             if (activity == null) continue;
+            if (!enrollmentEligibilityService.isAboveCurrentLevel(teacherId, activity)) continue;
+            if (hasPublishedEvaluation(teacherId, activity.getId())) continue;
 
             // 需要参加考试
             if (Boolean.TRUE.equals(activity.getHasExam())) {
+                LocalDateTime now = LocalDateTime.now();
+                if (activityService.isAssessmentWindowEnded(activity)) {
+                    continue;
+                }
                 List<ExamRecord> examRecordList = examRecordRepository
                         .findByTeacherIdAndActivityId(teacherId, activity.getId());
                 ExamRecord examRecord = examRecordList.isEmpty() ? null : examRecordList.get(0);
@@ -326,15 +338,12 @@ public class TeacherDashboardService {
                     todo.setRelatedId(activity.getId());
                     todo.setActionUrl("/teacher/exam/" + activity.getId());
                     // 考试截止时间
-                    if (activity.getEndDate() != null) {
-                        todo.setDeadline(activity.getEndDate().atTime(23, 59, 59));
-                    }
+                    todo.setDeadline(activity.getExamEnd());
                     todos.add(todo);
                 }
             }
         }
 
-        // 检查是否有可报名的活动
         List<Activity> allActivities = activityRepository.findAll();
         for (Activity activity : allActivities) {
             boolean alreadyEnrolled = enrollments.stream()
@@ -342,24 +351,7 @@ public class TeacherDashboardService {
                                    e.getStatus() == PeriodEnrollment.Status.enrolled);
 
             if (!alreadyEnrolled) {
-                // 检查是否可以报名
-                // 只有已通过对应级别才能报名下一级别
-                // C级：未通过C级或无级别都可以报名
-                // B2：已通过C级才能报名
-                // B1：已通过B2才能报名
-                // A2：已通过B1才能报名
-                // A1：已通过A2才能报名
-                Activity.Level currentLevel = getTeacherCurrentLevel(teacherId);
-                Activity.Level requiredLevel = Activity.Level.getPrevLevel(activity.getLevel());
-
-                boolean canEnroll = false;
-                if (activity.getLevel() == Activity.Level.C) {
-                    // C级：未通过任何级别（或无级别）都可以报名
-                    canEnroll = currentLevel == null || currentLevel == Activity.Level.C;
-                } else if (requiredLevel != null) {
-                    // 其他级别：必须已通过前置级别
-                    canEnroll = currentLevel != null && currentLevel.getTier() >= requiredLevel.getTier();
-                }
+                boolean canEnroll = activityService.canEnroll(activity.getId(), teacherId);
 
                 if (canEnroll) {
                     TeacherDashboardDTO.TodoItem todo = new TeacherDashboardDTO.TodoItem();
@@ -368,9 +360,9 @@ public class TeacherDashboardService {
                     todo.setDescription(activity.getName() + " (" + activity.getLevel().getDisplayName() + ")");
                     todo.setRelatedId(activity.getId());
                     todo.setActionUrl("/teacher/activities/" + activity.getId());
-                    todo.setDeadline(activity.getEnrollmentEnd());
+                    todo.setDeadline(getEnrollmentWindowEnd(activity));
                     todos.add(todo);
-                    break; // 只显示一个可报名的
+                    break;
                 }
             }
         }
@@ -378,24 +370,38 @@ public class TeacherDashboardService {
         return todos;
     }
 
-    private Activity.Level getTeacherCurrentLevel(Long teacherId) {
-        List<Evaluation> passedEvals = evaluationRepository
-                .findByTeacherIdAndIsPublished(teacherId)
+    private boolean hasPublishedEvaluation(Long teacherId, Long activityId) {
+        return evaluationRepository.findByTeacherIdAndActivityId(teacherId, activityId)
                 .stream()
-                .filter(e -> Boolean.TRUE.equals(e.getIsPassed()))
-                .collect(Collectors.toList());
-
-        Activity.Level highestLevel = null;
-        for (Evaluation eval : passedEvals) {
-            Activity activity = activityRepository.findById(eval.getActivityId()).orElse(null);
-            if (activity == null) continue;
-
-            if (highestLevel == null || activity.getLevel().getOrder() > highestLevel.getOrder()) {
-                highestLevel = activity.getLevel();
-            }
-        }
-
-        // 未通过任何考核返回null（视为无级别）
-        return highestLevel;
+                .anyMatch(eval -> Boolean.TRUE.equals(eval.getIsPublished()));
     }
+
+    private boolean isCurrentEnrollmentVisible(Long teacherId, Activity activity, Optional<Evaluation> publishedEvaluation) {
+        if (publishedEvaluation.isPresent() || !enrollmentEligibilityService.isAboveCurrentLevel(teacherId, activity)) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(activity.getHasExam())) {
+            return activity.getExamEnd() == null || !LocalDateTime.now().isAfter(activity.getExamEnd());
+        }
+        return true;
+    }
+
+    private boolean isEnrollmentWindowOpen(Activity activity) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime start = activity.getLevel() != Activity.Level.C && activity.getMaterialStart() != null
+                ? activity.getMaterialStart()
+                : activity.getEnrollmentStart();
+        LocalDateTime end = getEnrollmentWindowEnd(activity);
+        if (start != null && now.isBefore(start)) {
+            return false;
+        }
+        return end == null || !now.isAfter(end);
+    }
+
+    private LocalDateTime getEnrollmentWindowEnd(Activity activity) {
+        return activity.getLevel() != Activity.Level.C && activity.getMaterialEnd() != null
+                ? activity.getMaterialEnd()
+                : activity.getEnrollmentEnd();
+    }
+
 }

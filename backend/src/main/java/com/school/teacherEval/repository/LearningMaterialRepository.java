@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 @Repository
 public interface LearningMaterialRepository extends JpaRepository<LearningMaterial, Long> {
     
@@ -19,4 +21,6 @@ public interface LearningMaterialRepository extends JpaRepository<LearningMateri
     
     @Query("SELECT m FROM LearningMaterial m WHERE m.isDeleted = 0 AND m.id = :id")
     LearningMaterial findActiveById(@Param("id") Long id);
+
+    List<LearningMaterial> findByActivityIdInAndIsDeleted(List<Long> activityIds, Integer isDeleted);
 }

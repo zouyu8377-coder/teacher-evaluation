@@ -19,10 +19,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -275,7 +278,9 @@ public class ActivityService {
     
     public boolean canEnroll(Long activityId, Long teacherId) {
         Activity activity = getById(activityId);
-        return enrollmentEligibilityService.canEnroll(teacherId, activity);
+        return enrollmentEligibilityService.canEnroll(teacherId, activity)
+                && isEnrollmentWindowOpen(activity)
+                && !isAssessmentWindowEnded(activity);
     }
     
     public List<Activity> getAvailableForTeacher(Long teacherId) {
@@ -285,6 +290,53 @@ public class ActivityService {
             .filter(a -> !enrollmentRepository.existsByActivityIdAndTeacherIdAndStatus(
                 a.getId(), teacherId, PeriodEnrollment.Status.enrolled))
             .toList();
+    }
+
+    public List<Activity> getOtherForTeacher(Long teacherId) {
+        List<Activity> available = getAvailableForTeacher(teacherId);
+        Set<Long> availableIds = available.stream().map(Activity::getId).collect(Collectors.toSet());
+        return activityRepository.findAllOrderByLevel().stream()
+                .filter(activity -> activity.getId() != null && !availableIds.contains(activity.getId()))
+                .toList();
+    }
+
+    public boolean isEnrollmentWindowOpen(Activity activity) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime start = getEnrollmentWindowStart(activity);
+        LocalDateTime end = getEnrollmentWindowEnd(activity);
+        if (start != null && now.isBefore(start)) {
+            return false;
+        }
+        return end == null || !now.isAfter(end);
+    }
+
+    public boolean isAssessmentWindowEnded(Activity activity) {
+        LocalDateTime end = getAssessmentWindowEnd(activity);
+        return end != null && LocalDateTime.now().isAfter(end);
+    }
+
+    private LocalDateTime getEnrollmentWindowStart(Activity activity) {
+        if (activity.getLevel() != Activity.Level.C && activity.getMaterialStart() != null) {
+            return activity.getMaterialStart();
+        }
+        return activity.getEnrollmentStart();
+    }
+
+    private LocalDateTime getEnrollmentWindowEnd(Activity activity) {
+        if (activity.getLevel() != Activity.Level.C && activity.getMaterialEnd() != null) {
+            return activity.getMaterialEnd();
+        }
+        return activity.getEnrollmentEnd();
+    }
+
+    private LocalDateTime getAssessmentWindowEnd(Activity activity) {
+        if (Boolean.TRUE.equals(activity.getHasExam()) && activity.getExamEnd() != null) {
+            return activity.getExamEnd();
+        }
+        if (activity.getMaterialEnd() != null) {
+            return activity.getMaterialEnd();
+        }
+        return activity.getEnrollmentEnd();
     }
     
     public long getEnrolledCount(Long activityId) {

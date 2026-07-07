@@ -349,10 +349,25 @@ public class EvaluationService {
     }
 
     private void finalizeActivityAfterPublish(Activity activity) {
+        LocalDateTime now = LocalDateTime.now();
         activity.setScoresPublished(true);
-        activity.setScoresPublishedAt(LocalDateTime.now());
+        activity.setScoresPublishedAt(now);
+        activity.setEnrollmentEnd(minNow(activity.getEnrollmentEnd(), now));
+        if (Boolean.TRUE.equals(activity.getHasExam())) {
+            activity.setExamEnd(minNow(activity.getExamEnd(), now));
+        } else {
+            activity.setMaterialEnd(minNow(activity.getMaterialEnd(), now));
+        }
+        activity.setEndDate(now.toLocalDate());
         activityRepository.save(activity);
-        log.info("活动 {} 成绩已发布", activity.getId());
+        log.info("Activity {} scores published and closed", activity.getId());
+    }
+
+    private LocalDateTime minNow(LocalDateTime current, LocalDateTime now) {
+        if (current == null || current.isAfter(now)) {
+            return now;
+        }
+        return current;
     }
 
     private List<Long> parseReviewerIds(String reviewerIds) {

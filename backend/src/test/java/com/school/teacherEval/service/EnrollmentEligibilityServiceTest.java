@@ -38,6 +38,9 @@ class EnrollmentEligibilityServiceTest {
     void canEnroll_shouldAllowCLevelWithoutPreviousLevel() {
         Activity activity = new Activity();
         activity.setLevel(Activity.Level.C);
+        User teacher = new User();
+        teacher.setTeacherLevel(TeacherLevel.NONE);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(teacher));
 
         assertTrue(service.canEnroll(1L, activity));
     }
@@ -60,8 +63,25 @@ class EnrollmentEligibilityServiceTest {
         User teacher = new User();
         teacher.setTeacherLevel(TeacherLevel.C);
         when(userRepository.findById(1L)).thenReturn(Optional.of(teacher));
-        when(enrollmentRepository.findByTeacherId(1L)).thenReturn(java.util.List.of());
 
         assertFalse(service.canEnroll(1L, activity));
+    }
+
+    @Test
+    void canEnroll_shouldRejectSameOrLowerLevel() {
+        User teacher = new User();
+        teacher.setTeacherLevel(TeacherLevel.B);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(teacher));
+
+        Activity cActivity = new Activity();
+        cActivity.setLevel(Activity.Level.C);
+        Activity bActivity = new Activity();
+        bActivity.setLevel(Activity.Level.B1);
+        Activity aActivity = new Activity();
+        aActivity.setLevel(Activity.Level.A2);
+
+        assertFalse(service.canEnroll(1L, cActivity));
+        assertFalse(service.canEnroll(1L, bActivity));
+        assertTrue(service.canEnroll(1L, aActivity));
     }
 }

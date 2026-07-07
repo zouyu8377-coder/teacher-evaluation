@@ -164,17 +164,15 @@ public class Activity {
         }
 
         /**
-         * 判断通过某个级别后是否可以报考目标级别
-         * @param passedLevel 已通过的级别
-         * @param targetLevel 目标级别
-         */
         public static boolean canProgressTo(Level passedLevel, Level targetLevel) {
-            if (passedLevel == null || targetLevel == null) {
+            if (targetLevel == null) {
                 return false;
             }
-            // 如果目标级别没有前置要求（只有C级没有前置要求）
-            if (targetLevel.prevLevels.isEmpty()) {
-                return true;
+            if (passedLevel == null) {
+                return targetLevel.tier == 0;
+            }
+            return targetLevel.tier == passedLevel.tier + 1;
+        }
             }
             // 检查passedLevel是否是targetLevel的前置级别之一
             return targetLevel.prevLevels.contains(passedLevel);
@@ -188,7 +186,8 @@ public class Activity {
         }
 
         /**
-         * 获取目标级别的前置级别（取第一个前置级别即可）
+         * 获取目标级别所在大等级的代表性前置级别。
+         * B2/B1 同属 B 级，A2/A1 同属 A 级，业务判断应按 tier 处理。
          */
         public static Level getPrevLevel(Level targetLevel) {
             if (targetLevel == null || targetLevel.prevLevels.isEmpty()) {

@@ -379,9 +379,9 @@ const getWindowText = (enrollment: EnrollmentInfo) => {
 
 const getLevelClass = (level: string | undefined) => {
   if (!level) return 'level-none'
-  const levelOrder: Record<string, number> = { C: 0, B: 1, B2: 1, B1: 2, A: 3, A2: 3, A1: 4 }
+  const levelOrder: Record<string, number> = { C: 0, B: 1, B2: 1, B1: 1, A: 2, A2: 2, A1: 2 }
   const order = levelOrder[level] ?? 0
-  return `level-${['c', 'b', 'b1', 'a', 'a1'][order]}`
+  return `level-${['c', 'b', 'a'][order]}`
 }
 
 const getTodoIcon = (type: string) => {

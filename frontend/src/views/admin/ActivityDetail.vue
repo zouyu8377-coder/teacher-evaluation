@@ -315,11 +315,11 @@
             :on-change="handleFileChange"
             :on-remove="handleFileRemove"
             :file-list="fileList"
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.rar"
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.rar,.mp4"
           >
             <el-button>选择文件</el-button>
             <template #tip>
-              <div class="upload-tip">支持 PDF、Word、PPT、Excel、TXT、ZIP 格式</div>
+              <div class="upload-tip">支持 PDF、Word、PPT、Excel、TXT、ZIP、MP4 格式；MP4 最大 1GB，其他文件最大 200MB</div>
             </template>
           </el-upload>
         </el-form-item>
@@ -491,6 +491,16 @@ const uploadFormRef = ref()
 const uploadRef = ref()
 const fileList = ref<any[]>([])
 const selectedFile = ref<File | null>(null)
+const MAX_VIDEO_FILE_SIZE = 1024 * 1024 * 1024
+const MAX_NON_VIDEO_FILE_SIZE = 200 * 1024 * 1024
+
+const isMp4File = (file?: File | null) => file?.name?.toLowerCase().endsWith('.mp4') === true
+const isMaterialFileTooLarge = (file?: File | null) => {
+  if (!file) return false
+  return file.size > (isMp4File(file) ? MAX_VIDEO_FILE_SIZE : MAX_NON_VIDEO_FILE_SIZE)
+}
+const getMaterialSizeLimitMessage = (file?: File | null) =>
+  isMp4File(file) ? '视频资料单个文件不能超过1GB' : '学习资料单个文件不能超过200MB'
 
 // 编辑活动相关
 const showEditDialog = ref(false)
@@ -575,6 +585,15 @@ const handlePublishScores = async () => {
       ElMessage.error('分数线必须在 0-100 之间')
       return
     }
+    await ElMessageBox.confirm(
+      `确认发布成绩并自动截止该活动吗？通过分数线为 ${passingScore} 分。发布后评分和关键时间将锁定。`,
+      '确认发布成绩',
+      {
+        confirmButtonText: '确认发布',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
     const res = await publishEvaluationScores(activity.value.id, passingScore)
     if (res.code === 200) {
       ElMessage.success('成绩已公布')
@@ -784,6 +803,12 @@ const formatFileSize = (size: number) => {
 }
 
 const handleFileChange = (file: any) => {
+  if (isMaterialFileTooLarge(file.raw)) {
+    ElMessage.warning(getMaterialSizeLimitMessage(file.raw))
+    fileList.value = []
+    selectedFile.value = null
+    return
+  }
   selectedFile.value = file.raw
 }
 

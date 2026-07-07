@@ -48,3 +48,24 @@ export const updateTeacherLevel = (id: number, level: string) => {
 export const deleteUser = (id: number) => {
   return api.delete(`/users/${id}`) as Promise<ApiResponse<void>>
 }
+
+export interface UserImportResult {
+  createdCount: number
+  updatedCount: number
+  skippedCount: number
+  errors: string[]
+}
+
+export const downloadUserTemplate = () => {
+  return api.get('/users/template', { responseType: 'blob' }) as Promise<Blob>
+}
+
+export const exportUsers = (params: UserQuery) => {
+  return api.get('/users/export', { params, responseType: 'blob' }) as Promise<Blob>
+}
+
+export const importUsers = (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api.post('/users/import', formData) as Promise<ApiResponse<UserImportResult>>
+}

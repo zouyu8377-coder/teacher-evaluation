@@ -257,7 +257,7 @@
           >
             <el-button>选择文件</el-button>
             <template #tip>
-              <div class="upload-tip">支持 doc, docx, pdf, txt 格式，最大 100MB</div>
+              <div class="upload-tip">支持 doc, docx, pdf, txt 格式，最大 200MB</div>
             </template>
           </el-upload>
         </el-form-item>

@@ -18,11 +18,19 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class LearningMaterialService {
+
+    private static final long MAX_VIDEO_FILE_SIZE = 1024L * 1024 * 1024;
+    private static final long MAX_NON_VIDEO_FILE_SIZE = 200L * 1024 * 1024;
+    private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList(
+            ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".txt", ".zip", ".rar", ".mp4"
+    );
     
     private final LearningMaterialRepository materialRepository;
     private final MinioConfig minioConfig;
@@ -49,6 +57,8 @@ public class LearningMaterialService {
     @Transactional
     public LearningMaterial uploadMaterial(MultipartFile file, Long activityId, 
                                            String title, String description, Long createdBy) throws Exception {
+        validateFile(file);
+
         String bucketName = minioConfig.getBucketName();
         MinioClient minioClient = minioConfig.minioClient();
         
@@ -81,6 +91,30 @@ public class LearningMaterialService {
         material.setCreatedBy(createdBy);
         
         return materialRepository.save(material);
+    }
+
+    private void validateFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("请选择要上传的学习资料");
+        }
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || originalFilename.isBlank()) {
+            throw new BusinessException("文件名不能为空");
+        }
+        int lastDotIndex = originalFilename.lastIndexOf('.');
+        if (lastDotIndex <= 0 || lastDotIndex == originalFilename.length() - 1) {
+            throw new BusinessException("文件缺少扩展名");
+        }
+        String extension = originalFilename.substring(lastDotIndex).toLowerCase();
+        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+            throw new BusinessException("不支持的学习资料类型，仅允许: " + String.join(", ", ALLOWED_EXTENSIONS));
+        }
+        long maxSize = ".mp4".equals(extension) ? MAX_VIDEO_FILE_SIZE : MAX_NON_VIDEO_FILE_SIZE;
+        if (file.getSize() > maxSize) {
+            throw new BusinessException(".mp4".equals(extension)
+                    ? "视频资料单个文件不能超过1GB"
+                    : "学习资料单个文件不能超过200MB");
+        }
     }
     
     @Transactional

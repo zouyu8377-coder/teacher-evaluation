@@ -48,8 +48,8 @@ public class DocumentService {
         "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "text/plain", "application/zip"
     );
-    // 最大文件大小 50MB
-    private static final long MAX_FILE_SIZE = 50 * 1024 * 1024;
+    // 最大文件大小 200MB
+    private static final long MAX_FILE_SIZE = 200L * 1024 * 1024;
 
     private final DocumentRepository documentRepository;
     private final MinioConfig minioConfig;
@@ -105,7 +105,7 @@ public class DocumentService {
 
         // 文件大小校验
         if (file.getSize() > MAX_FILE_SIZE) {
-            throw new BusinessException("文件大小超过限制（最大50MB）");
+            throw new BusinessException("文件大小超过限制（最大200MB）");
         }
 
         String originalFilename = file.getOriginalFilename();

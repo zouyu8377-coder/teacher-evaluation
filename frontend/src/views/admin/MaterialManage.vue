@@ -73,10 +73,14 @@
             :on-change="handleFileChange"
             :on-remove="handleFileRemove"
             :file-list="fileList"
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.rar,.mp4"
             drag
           >
             <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
             <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+            <template #tip>
+              <div class="el-upload__tip">支持 PDF、Word、PPT、Excel、TXT、ZIP、MP4 格式；MP4 最大 1GB，其他文件最大 200MB</div>
+            </template>
           </el-upload>
         </el-form-item>
       </el-form>
@@ -113,6 +117,8 @@ const editId = ref<number | null>(null)
 const formRef = ref()
 const uploadRef = ref()
 const fileList = ref<any[]>([])
+const MAX_VIDEO_FILE_SIZE = 1024 * 1024 * 1024
+const MAX_NON_VIDEO_FILE_SIZE = 200 * 1024 * 1024
 
 const query = reactive({
   page: 1,
@@ -178,6 +184,15 @@ const handleEdit = (row: any) => {
 }
 
 const handleFileChange = (uploadFile: any, uploadFiles: any[]) => {
+  const file = uploadFile?.raw || uploadFiles?.[0]?.raw
+  const isMp4 = file?.name?.toLowerCase().endsWith('.mp4') === true
+  const maxSize = isMp4 ? MAX_VIDEO_FILE_SIZE : MAX_NON_VIDEO_FILE_SIZE
+  if (file?.size > maxSize) {
+    ElMessage.warning(isMp4 ? '视频资料单个文件不能超过1GB' : '学习资料单个文件不能超过200MB')
+    form.file = null
+    fileList.value = []
+    return
+  }
   if (uploadFile?.raw) {
     form.file = uploadFile.raw
     fileList.value = [uploadFile]

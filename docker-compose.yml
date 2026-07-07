@@ -50,7 +50,7 @@ services:
       - teacher-eval-network
 
   backend:
-    image: teacher-eval-backend:1.4.2
+    image: teacher-eval-backend:1.4.3
     container_name: teacher-eval-backend-new
     restart: unless-stopped
     ports:
@@ -77,7 +77,7 @@ services:
       - teacher-eval-network
 
   frontend:
-    image: teacher-eval-frontend:1.4.2
+    image: teacher-eval-frontend:1.4.3
     container_name: teacher-eval-frontend
     restart: unless-stopped
     ports:

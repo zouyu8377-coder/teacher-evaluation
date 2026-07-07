@@ -1,9 +1,12 @@
 package com.school.teacherEval.service;
 
 import com.school.teacherEval.entity.Activity;
+import com.school.teacherEval.entity.PeriodEnrollment;
 import com.school.teacherEval.entity.TeacherLevel;
 import com.school.teacherEval.entity.TeacherLevelHistory;
 import com.school.teacherEval.entity.User;
+import com.school.teacherEval.repository.ActivityRepository;
+import com.school.teacherEval.repository.EnrollmentRepository;
 import com.school.teacherEval.repository.TeacherLevelHistoryRepository;
 import com.school.teacherEval.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +24,8 @@ public class TeacherLevelService {
 
     private final UserRepository userRepository;
     private final TeacherLevelHistoryRepository historyRepository;
+    private final ActivityRepository activityRepository;
+    private final EnrollmentRepository enrollmentRepository;
 
     /**
      * 自动升级：仅在通过的等级高于当前等级时执行
@@ -90,5 +95,33 @@ public class TeacherLevelService {
         history.setChangeType(changeType);
         history.setChangedByUserId(changedByUserId);
         historyRepository.save(history);
+
+        removeObsoleteUnfinishedEnrollments(user.getId(), newLevel);
+    }
+
+    private void removeObsoleteUnfinishedEnrollments(Long teacherId, TeacherLevel newLevel) {
+        if (newLevel == null || newLevel == TeacherLevel.NONE) {
+            return;
+        }
+
+        List<PeriodEnrollment> enrollments = enrollmentRepository.findByTeacherId(teacherId);
+        for (PeriodEnrollment enrollment : enrollments) {
+            if (enrollment.getStatus() != PeriodEnrollment.Status.enrolled) {
+                continue;
+            }
+
+            Activity activity = activityRepository.findById(enrollment.getActivityId()).orElse(null);
+            if (activity == null || activity.getLevel() == null || Boolean.TRUE.equals(activity.getScoresPublished())) {
+                continue;
+            }
+
+            TeacherLevel activityLevel = TeacherLevel.fromActivityLevel(activity.getLevel());
+            if (activityLevel.getTier() <= newLevel.getTier()) {
+                enrollment.setStatus(PeriodEnrollment.Status.removed);
+                enrollmentRepository.save(enrollment);
+                log.info("Removed obsolete unfinished enrollment teacherId={}, activityId={}, newLevel={}",
+                        teacherId, activity.getId(), newLevel);
+            }
+        }
     }
 }

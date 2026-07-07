@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -55,6 +57,13 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining(", "));
         log.warn("参数校验失败 - URI: {}, 错误: {}", request.getRequestURI(), errors);
         return ApiResponse.error(400, errors);
+    }
+
+    @ExceptionHandler({MaxUploadSizeExceededException.class, MultipartException.class})
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleUploadException(Exception e, HttpServletRequest request) {
+        log.warn("文件上传失败 - URI: {}, 错误: {}", request.getRequestURI(), e.getMessage());
+        return ApiResponse.error(400, "上传失败：请求体过大或文件格式不正确，视频最大1GB，其他文件最大200MB");
     }
 
     /**

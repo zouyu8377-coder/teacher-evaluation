@@ -2,22 +2,30 @@ package com.school.teacherEval.controller;
 
 import com.school.teacherEval.dto.ApiResponse;
 import com.school.teacherEval.dto.UserCreateDTO;
+import com.school.teacherEval.dto.UserImportResultDTO;
 import com.school.teacherEval.dto.UserUpdateDTO;
 import com.school.teacherEval.entity.TeacherLevel;
 import com.school.teacherEval.entity.User;
 import com.school.teacherEval.service.TeacherLevelService;
+import com.school.teacherEval.service.UserExcelService;
 import com.school.teacherEval.service.UserService;
 import com.school.teacherEval.vo.PageVO;
 import com.school.teacherEval.vo.UserVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.springframework.data.domain.Page;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -30,6 +38,7 @@ public class UserController {
     
     private final UserService userService;
     private final TeacherLevelService teacherLevelService;
+    private final UserExcelService userExcelService;
     
     @GetMapping
     @Operation(summary = "用户列表")
@@ -73,6 +82,34 @@ public class UserController {
                 .map(this::toVO)
                 .collect(Collectors.toList());
         return ApiResponse.success(result);
+    }
+
+    @GetMapping("/template")
+    @Operation(summary = "下载用户导入模板")
+    @PreAuthorize("hasRole('admin')")
+    public void downloadUserTemplate(HttpServletResponse response) throws IOException {
+        try (Workbook workbook = userExcelService.createTemplateWorkbook()) {
+            writeWorkbook(response, workbook, "用户导入模板.xlsx");
+        }
+    }
+
+    @GetMapping("/export")
+    @Operation(summary = "导出用户数据")
+    @PreAuthorize("hasRole('admin')")
+    public void exportUsers(
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String keyword,
+            HttpServletResponse response) throws IOException {
+        try (Workbook workbook = userExcelService.exportUsers(role, keyword)) {
+            writeWorkbook(response, workbook, "用户数据.xlsx");
+        }
+    }
+
+    @PostMapping("/import")
+    @Operation(summary = "Excel批量导入或更新用户")
+    @PreAuthorize("hasRole('admin')")
+    public ApiResponse<UserImportResultDTO> importUsers(@RequestParam MultipartFile file) {
+        return ApiResponse.success(userExcelService.importUsers(file));
     }
     
     @PostMapping
@@ -119,6 +156,13 @@ public class UserController {
                 user.getTeacherLevel() != null ? user.getTeacherLevel().name() : null,
                 user.getLevelChangedAt()
         );
+    }
+
+    private void writeWorkbook(HttpServletResponse response, Workbook workbook, String filename) throws IOException {
+        String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFilename);
+        workbook.write(response.getOutputStream());
     }
 
     @PutMapping("/{id}/level")

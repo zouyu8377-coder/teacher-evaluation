@@ -10,13 +10,13 @@
       <el-tabs v-model="activeTab">
         <!-- 已报名活动 - 卡片展示 -->
         <el-tab-pane label="已报名活动" name="enrolled">
-          <div v-if="myEnrollments.length === 0 && !loading" class="empty-container">
+          <div v-if="activeMyEnrollments.length === 0 && !loading" class="empty-container">
             <el-empty description="暂未报名任何考核活动" />
           </div>
 
           <div v-else class="activity-grid">
             <div
-              v-for="item in myEnrollments"
+              v-for="item in activeMyEnrollments"
               :key="item.id"
               class="activity-card"
               @click="goToActivityDetail(item)"
@@ -160,13 +160,29 @@
           </el-table>
           <el-empty v-if="availableActivities.length === 0 && !loading" description="暂无可报名活动" />
         </el-tab-pane>
+
+        <el-tab-pane label="其他活动" name="other">
+          <el-table :data="otherActivityRows" stripe v-loading="loading">
+            <el-table-column prop="name" label="活动名称" min-width="220" show-overflow-tooltip />
+            <el-table-column prop="level" label="级别" width="90">
+              <template #default="{ row }">
+                <el-tag :type="getLevelType(row.level)">{{ row.level }}级</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="reason" label="状态" width="160" />
+            <el-table-column prop="windowText" label="考核时间" width="260" />
+            <el-table-column prop="enrollmentWindowText" label="报名时间" width="220" />
+            <el-table-column prop="description" label="说明" show-overflow-tooltip />
+          </el-table>
+          <el-empty v-if="otherActivityRows.length === 0 && !loading" description="暂无其他活动" />
+        </el-tab-pane>
       </el-tabs>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { storeToRefs } from 'pinia'
@@ -180,6 +196,66 @@ const { myEnrollments, loading } = storeToRefs(activityStore)
 
 const activeTab = ref((route.query.tab as string) || 'enrolled')
 const availableActivities = ref<(Activity & { enrollmentStatus?: string; canEnroll?: boolean; enrollmentInfo?: any })[]>([])
+const otherActivities = ref<(Activity & { enrollmentStatus?: string; canEnroll?: boolean; enrollmentInfo?: any })[]>([])
+
+const getActivityWindowEnd = (activity: any) => {
+  if (activity.hasExam || activity.level === 'C') return activity.examEnd || activity.enrollmentEnd
+  return activity.materialEnd || activity.enrollmentEnd
+}
+
+const getActivityWindowText = (activity: any) => {
+  if (activity.hasExam || activity.level === 'C') {
+    return `${formatDateTimeFull(activity.examStart)} ~ ${formatDateTimeFull(activity.examEnd)}`
+  }
+  return `${formatDateTimeFull(activity.materialStart)} ~ ${formatDateTimeFull(activity.materialEnd)}`
+}
+
+const getEnrollmentWindowText = (activity: any) =>
+  `${formatDateTimeFull(activity.enrollmentStart || activity.enrollmentInfo?.enrollmentStart)} ~ ${formatDateTimeFull(activity.enrollmentEnd || activity.enrollmentInfo?.enrollmentEnd)}`
+
+const isActivityExpired = (activity: any) => {
+  const end = getActivityWindowEnd(activity)
+  return !!end && new Date() > new Date(end)
+}
+
+const isActiveEnrollment = (item: any) => {
+  if (item.scorePublished) return false
+  if (isActivityExpired(item)) return false
+  return true
+}
+
+const activeMyEnrollments = computed(() => myEnrollments.value.filter(isActiveEnrollment))
+const inactiveMyEnrollments = computed(() => myEnrollments.value.filter(item => !isActiveEnrollment(item)))
+const enrolledActivityIds = computed(() => new Set(myEnrollments.value.map(item => item.activityId)))
+const otherActivityRows = computed(() => {
+  const enrolledRows = inactiveMyEnrollments.value.map(item => ({
+    id: `enrolled-${item.activityId}`,
+    name: item.activityName,
+    level: item.level,
+    description: item.comment || '',
+    reason: item.scorePublished ? '已发布成绩' : isActivityExpired(item) ? '已过期' : '已报名',
+    windowText: getActivityWindowText(item),
+    enrollmentWindowText: formatDateTimeFull(item.enrolledAt)
+  }))
+  const otherRows = otherActivities.value
+    .filter(activity => !enrolledActivityIds.value.has(activity.id))
+    .map(activity => ({
+      id: `activity-${activity.id}`,
+      name: activity.name,
+      level: activity.level,
+      description: activity.description || '',
+      reason: isActivityExpired(activity)
+        ? '已过期'
+        : activity.enrollmentStatus === 'ended'
+          ? '报名已截止'
+          : activity.canEnroll === false
+            ? '等级不符合'
+            : '不可报名',
+      windowText: getActivityWindowText(activity),
+      enrollmentWindowText: getEnrollmentWindowText(activity)
+    }))
+  return [...enrolledRows, ...otherRows]
+})
 
 const formatDateTime = (datetime: string | null) => {
   if (!datetime) return '-'
@@ -376,6 +452,33 @@ const loadAvailableActivities = async () => {
   availableActivities.value = enhanced
 }
 
+const loadOtherActivities = async () => {
+  const activities = await activityStore.loadOtherActivities()
+  const now = new Date()
+  otherActivities.value = await Promise.all(
+    activities.map(async (activity) => {
+      const enrollmentStart = activity.enrollmentStart ? new Date(activity.enrollmentStart) : null
+      const enrollmentEnd = activity.enrollmentEnd ? new Date(activity.enrollmentEnd) : null
+      let enrollmentStatus = 'active'
+      if (enrollmentStart && now < enrollmentStart) {
+        enrollmentStatus = 'pending'
+      } else if (enrollmentEnd && now > enrollmentEnd) {
+        enrollmentStatus = 'ended'
+      }
+      const [canEnroll, enrollmentInfo] = await Promise.all([
+        activityStore.checkCanEnroll(activity.id).catch(() => false),
+        activityStore.loadEnrollmentInfo(activity.id).catch(() => null)
+      ])
+      return {
+        ...activity,
+        enrollmentStatus,
+        canEnroll,
+        enrollmentInfo
+      }
+    })
+  )
+}
+
 const loadMyActivities = async () => {
   await activityStore.loadMyEnrollments()
 }
@@ -387,6 +490,7 @@ const handleEnroll = async (row: any) => {
       const levelText = row.level === 'C' ? '考试' : '上传考核文档'
       ElMessage.success(`报名成功！请等待报名时间开始后进行${row.level}级${levelText}。`)
       await loadAvailableActivities()
+      await loadOtherActivities()
       activeTab.value = 'enrolled'
     }
   } catch (e: any) {
@@ -414,6 +518,7 @@ const goToActivityDetail = (item: any) => {
 onMounted(async () => {
   await loadMyActivities()
   await loadAvailableActivities()
+  await loadOtherActivities()
 })
 </script>
 

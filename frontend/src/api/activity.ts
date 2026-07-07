@@ -41,6 +41,10 @@ export const getAvailableActivitiesForTeacher = (periodId?: number) => {
   return api.get('/activities/teacher/available') as Promise<ApiResponse<Activity[]>>
 }
 
+export const getOtherActivitiesForTeacher = () => {
+  return api.get('/activities/teacher/other') as Promise<ApiResponse<Activity[]>>
+}
+
 export const canEnrollActivity = (id: number) => {
   return api.get(`/activities/${id}/can-enroll`) as Promise<ApiResponse<boolean>>
 }

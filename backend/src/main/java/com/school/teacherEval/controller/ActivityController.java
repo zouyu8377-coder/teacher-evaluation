@@ -92,6 +92,12 @@ public class ActivityController {
         return ApiResponse.success(activityService.getAvailableForTeacher(user.getId()));
     }
 
+    @GetMapping(value = "/teacher/other", produces = "application/json;charset=UTF-8")
+    public ApiResponse<List<Activity>> getOtherForTeacher() {
+        User user = getCurrentUser();
+        return ApiResponse.success(activityService.getOtherForTeacher(user.getId()));
+    }
+
     @GetMapping(value = "/my-enrollments", produces = "application/json;charset=UTF-8")
     public ApiResponse<List<MyEnrollmentVO>> getMyEnrollments() {
         User user = getCurrentUser();

@@ -19,8 +19,23 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Page<User> findByRole(User.Role role, Pageable pageable);
     
     Page<User> findByRoleAndRealNameContaining(User.Role role, String keyword, Pageable pageable);
+
+    Page<User> findByRoleAndUsernameContainingOrRoleAndRealNameContainingOrRoleAndDepartmentContaining(
+            User.Role roleForUsername,
+            String usernameKeyword,
+            User.Role roleForRealName,
+            String realNameKeyword,
+            User.Role roleForDepartment,
+            String departmentKeyword,
+            Pageable pageable);
     
     List<User> findByRole(User.Role role);
     
     Page<User> findByRealNameContaining(String keyword, Pageable pageable);
+
+    Page<User> findByUsernameContainingOrRealNameContainingOrDepartmentContaining(
+            String usernameKeyword,
+            String realNameKeyword,
+            String departmentKeyword,
+            Pageable pageable);
 }

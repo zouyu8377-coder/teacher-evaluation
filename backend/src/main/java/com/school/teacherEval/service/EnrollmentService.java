@@ -38,7 +38,9 @@ public class EnrollmentService {
     }
     
     private boolean canEnroll(Long teacherId, Activity activity) {
-        return enrollmentEligibilityService.canEnroll(teacherId, activity);
+        return enrollmentEligibilityService.canEnroll(teacherId, activity)
+            && isEnrollmentWindowOpen(activity)
+            && !isAssessmentWindowEnded(activity);
     }
     
     @Transactional
@@ -58,6 +60,9 @@ public class EnrollmentService {
         }
         if (enrollEnd != null && now.isAfter(enrollEnd)) {
             throw new BusinessException("报名已结束");
+        }
+        if (isAssessmentWindowEnded(activity)) {
+            throw new BusinessException("活动已结束");
         }
 
         if (activity.getMaxParticipants() != null && activity.getMaxParticipants() > 0) {
@@ -90,6 +95,31 @@ public class EnrollmentService {
 
     private LocalDateTime getEnrollmentWindowEnd(Activity activity) {
         if (activity.getLevel() != Activity.Level.C && activity.getMaterialEnd() != null) {
+            return activity.getMaterialEnd();
+        }
+        return activity.getEnrollmentEnd();
+    }
+
+    private boolean isEnrollmentWindowOpen(Activity activity) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime enrollStart = getEnrollmentWindowStart(activity);
+        LocalDateTime enrollEnd = getEnrollmentWindowEnd(activity);
+        if (enrollStart != null && now.isBefore(enrollStart)) {
+            return false;
+        }
+        return enrollEnd == null || !now.isAfter(enrollEnd);
+    }
+
+    private boolean isAssessmentWindowEnded(Activity activity) {
+        LocalDateTime end = getAssessmentWindowEnd(activity);
+        return end != null && LocalDateTime.now().isAfter(end);
+    }
+
+    private LocalDateTime getAssessmentWindowEnd(Activity activity) {
+        if (Boolean.TRUE.equals(activity.getHasExam()) && activity.getExamEnd() != null) {
+            return activity.getExamEnd();
+        }
+        if (activity.getMaterialEnd() != null) {
             return activity.getMaterialEnd();
         }
         return activity.getEnrollmentEnd();

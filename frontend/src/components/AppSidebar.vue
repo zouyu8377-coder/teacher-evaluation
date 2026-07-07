@@ -82,7 +82,7 @@ declare const __APP_VERSION__: string
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
-const appVersion = __APP_VERSION__ || '1.4.2'
+const appVersion = __APP_VERSION__ || '1.4.3'
 
 // 检查当前路由是否匹配菜单项
 const isActive = (path: string) => {

@@ -66,13 +66,23 @@ public class UserService {
         if (role != null && !role.isEmpty()) {
             User.Role userRole = User.Role.valueOf(role);
             if (keyword != null && !keyword.isEmpty()) {
-                return userRepository.findByRoleAndRealNameContaining(userRole, keyword, pageable);
+                return userRepository.findByRoleAndUsernameContainingOrRoleAndRealNameContainingOrRoleAndDepartmentContaining(
+                        userRole, keyword,
+                        userRole, keyword,
+                        userRole, keyword,
+                        pageable
+                );
             }
             return userRepository.findByRole(userRole, pageable);
         }
         
         if (keyword != null && !keyword.isEmpty()) {
-            return userRepository.findByRealNameContaining(keyword, pageable);
+            return userRepository.findByUsernameContainingOrRealNameContainingOrDepartmentContaining(
+                    keyword,
+                    keyword,
+                    keyword,
+                    pageable
+            );
         }
         
         return userRepository.findAll(pageable);

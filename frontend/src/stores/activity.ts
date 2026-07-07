@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import {
   getActivityList,
   getAvailableActivitiesForTeacher,
+  getOtherActivitiesForTeacher,
   getMyEnrollments,
   getEnrollmentInfo,
   enrollActivity,
@@ -16,6 +17,7 @@ export const useActivityStore = defineStore('activity', () => {
   // State
   const allActivities = ref<Activity[]>([])
   const availableActivities = ref<Activity[]>([])
+  const otherActivities = ref<Activity[]>([])
   const myEnrollments = ref<MyEnrollmentVO[]>([])
   const enrollmentInfoMap = ref<Record<number, EnrollmentInfoVO>>({})
   const reviewProgressMap = ref<Record<number, ReviewProgressVO>>({})
@@ -44,6 +46,19 @@ export const useActivityStore = defineStore('activity', () => {
         availableActivities.value = res.data || []
       }
       return availableActivities.value
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const loadOtherActivities = async () => {
+    loading.value = true
+    try {
+      const res: any = await getOtherActivitiesForTeacher()
+      if (res.code === 200) {
+        otherActivities.value = res.data || []
+      }
+      return otherActivities.value
     } finally {
       loading.value = false
     }
@@ -109,10 +124,12 @@ export const useActivityStore = defineStore('activity', () => {
   return {
     allActivities,
     availableActivities,
+    otherActivities,
     myEnrollments,
     loading,
     loadAllActivities,
     loadAvailableActivities,
+    loadOtherActivities,
     loadMyEnrollments,
     loadEnrollmentInfo,
     loadReviewProgress,
