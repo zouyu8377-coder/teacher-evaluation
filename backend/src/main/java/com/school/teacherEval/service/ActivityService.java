@@ -5,12 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.Evaluation;
 import com.school.teacherEval.entity.PeriodEnrollment;
+import com.school.teacherEval.entity.User;
 import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.ActivityRepository;
 import com.school.teacherEval.repository.DocumentRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
 import com.school.teacherEval.repository.EnrollmentRepository;
 import com.school.teacherEval.repository.ExamRecordRepository;
+import com.school.teacherEval.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.Objects;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 @Service
@@ -33,6 +36,7 @@ public class ActivityService {
     private final EvaluationRepository evaluationRepository;
     private final ExamRecordRepository examRecordRepository;
     private final DocumentRepository documentRepository;
+    private final UserRepository userRepository;
     private final ActivityValidator activityValidator;
     private final EnrollmentEligibilityService enrollmentEligibilityService;
 
@@ -55,6 +59,7 @@ public class ActivityService {
     @Transactional
     public Activity create(Activity activity) {
         prepareActivityForLevel(activity);
+        normalizeReviewerConfig(activity);
         activityValidator.validateForSave(activity);
 
         // 默认评分人为0人
@@ -121,8 +126,47 @@ public class ActivityService {
         // 只有在创建时才设置hasExam，update时不自动修改
         if (updated.getExamDurationMinutes() != null) activity.setExamDurationMinutes(updated.getExamDurationMinutes());
         prepareActivityForLevel(activity);
+        normalizeReviewerConfig(activity);
+        activityValidator.validateActivation(activity);
         // 保存时保持原有status，不自动更新
         return activityRepository.save(activity);
+    }
+
+    private void normalizeReviewerConfig(Activity activity) {
+        if (activity == null || activity.getLevel() == Activity.Level.C) {
+            if (activity != null) {
+                activity.setReviewerIds("[]");
+                activity.setReviewerCount(0);
+            }
+            return;
+        }
+
+        List<Long> reviewerIds = parseReviewerIds(activity.getReviewerIds());
+        if (reviewerIds.isEmpty()) {
+            activity.setReviewerIds("[]");
+            activity.setReviewerCount(0);
+            return;
+        }
+
+        List<Long> validEvaluatorIds = new ArrayList<>();
+        for (Long reviewerId : new LinkedHashSet<>(reviewerIds)) {
+            User reviewer = userRepository.findById(reviewerId)
+                    .orElseThrow(() -> new BusinessException("Reviewer does not exist: " + reviewerId));
+            if (reviewer.getRole() != User.Role.evaluator) {
+                throw new BusinessException("Only evaluator users can be assigned as reviewers: " + reviewer.getUsername());
+            }
+            if (!Integer.valueOf(1).equals(reviewer.getStatus())) {
+                throw new BusinessException("Reviewer is disabled: " + reviewer.getUsername());
+            }
+            validEvaluatorIds.add(reviewerId);
+        }
+
+        try {
+            activity.setReviewerIds(objectMapper.writeValueAsString(validEvaluatorIds));
+            activity.setReviewerCount(validEvaluatorIds.size());
+        } catch (Exception e) {
+            throw new BusinessException("Failed to serialize reviewer config: " + e.getMessage());
+        }
     }
 
     private void prepareActivityForLevel(Activity activity) {

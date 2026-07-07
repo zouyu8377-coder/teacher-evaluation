@@ -2,12 +2,14 @@ package com.school.teacherEval.service;
 
 import com.school.teacherEval.entity.Activity;
 import com.school.teacherEval.entity.PeriodEnrollment;
+import com.school.teacherEval.entity.User;
 import com.school.teacherEval.exception.BusinessException;
 import com.school.teacherEval.repository.ActivityRepository;
 import com.school.teacherEval.repository.DocumentRepository;
 import com.school.teacherEval.repository.EnrollmentRepository;
 import com.school.teacherEval.repository.EvaluationRepository;
 import com.school.teacherEval.repository.ExamRecordRepository;
+import com.school.teacherEval.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +40,8 @@ class ActivityServiceTest {
     private ExamRecordRepository examRecordRepository;
     @Mock
     private DocumentRepository documentRepository;
+    @Mock
+    private UserRepository userRepository;
     @Mock
     private ActivityValidator activityValidator;
     @Mock
@@ -101,6 +105,12 @@ class ActivityServiceTest {
         nonC.setExamPaperId(9L);
         nonC.setReviewerIds("[10]");
         nonC.setReviewerCount(1);
+        User evaluator = new User();
+        evaluator.setId(10L);
+        evaluator.setUsername("evaluator10");
+        evaluator.setRole(User.Role.evaluator);
+        evaluator.setStatus(1);
+        when(userRepository.findById(10L)).thenReturn(Optional.of(evaluator));
         when(activityRepository.save(any(Activity.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Activity result = activityService.create(nonC);
@@ -111,6 +121,26 @@ class ActivityServiceTest {
         assertEquals(null, result.getExamStart());
         assertEquals(null, result.getExamEnd());
         assertEquals(null, result.getExamPaperId());
+    }
+
+    @Test
+    void create_shouldRejectAdminAsReviewer() {
+        Activity nonC = new Activity();
+        nonC.setName("B activity");
+        nonC.setLevel(Activity.Level.B1);
+        nonC.setEnrollmentStart(LocalDateTime.now().minusHours(1));
+        nonC.setEnrollmentEnd(LocalDateTime.now().plusHours(1));
+        nonC.setReviewerIds("[1]");
+        nonC.setReviewerCount(1);
+
+        User admin = new User();
+        admin.setId(1L);
+        admin.setUsername("admin");
+        admin.setRole(User.Role.admin);
+        admin.setStatus(1);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
+
+        assertThrows(BusinessException.class, () -> activityService.create(nonC));
     }
 
     @Test
