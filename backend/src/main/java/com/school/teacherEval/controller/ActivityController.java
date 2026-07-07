@@ -400,6 +400,10 @@ public class ActivityController {
     public ApiResponse<List<EnrollmentTeacherVO>> getEnrollments(@PathVariable Long id) {
         List<User> teachers = enrollmentService.getEnrolledTeachersByActivity(id);
         Activity activity = activityService.getById(id);
+        var evaluationSummary = evaluationService.getActivitySummary(id, null);
+        List<Evaluation> activityEvaluations = evaluationSummary.getEvaluations() != null
+                ? evaluationSummary.getEvaluations()
+                : List.of();
         List<EnrollmentTeacherVO> result = teachers.stream()
             .map(teacher -> {
                 PeriodEnrollment enrollment = enrollmentService.getEnrollment(id, teacher.getId());
@@ -411,7 +415,7 @@ public class ActivityController {
                 java.math.BigDecimal examScore = null;
                 java.math.BigDecimal finalScore = null;
                 Boolean isPassed = null;
-                var publishedEvaluation = evaluationService.getActivitySummary(id, null).getEvaluations().stream()
+                var publishedEvaluation = activityEvaluations.stream()
                         .filter(ev -> teacher.getId().equals(ev.getTeacherId()))
                         .filter(ev -> Boolean.TRUE.equals(ev.getIsPublished()))
                         .filter(ev -> ev.getFinalScore() != null)
